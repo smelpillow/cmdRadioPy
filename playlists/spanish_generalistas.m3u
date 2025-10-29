@@ -1,0 +1,13 @@
+#EXTM3U
+#EXTINF:-1,Cadena Ser
+https://19983.live.streamtheworld.com/SER_BARCELONA.mp3
+#EXTINF:-1, RAC1
+https://streaming.rac1.cat
+#EXTINF:-1, Rock Fm
+http://rockfm.cope.stream.flumotion.com/cope/rockfm.mp3.m3u
+#EXTINF:-1, Los 40 Classic
+https://25603.live.streamtheworld.com/LOS40_CLASSICAAC.aac
+#EXTINF:-1 radio="true" tvg-id="EuropaFM.Radio" tvg-logo="https://graph.facebook.com/tueuropafm/picture?width=200&height=200" group-title="Radio_Populares" tvg-name="Europa FM",Europa FM
+https://livefastly-webs.europafm.com/europafm/audio/master.m3u8
+#EXTINF:-1 radio="true" tvg-logo="https://i0.wp.com/www.emisorasmusicales.net/wp-content/uploads/2020/03/Rockstar.png?fit=200%2C200" group-title="Radio_C. Valenciana" tvg-name="RockStar",RockStar
+https://stream.mediasector.es/radio/8060/rockstar.mp3

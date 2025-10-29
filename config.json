@@ -1,0 +1,13 @@
+{
+  "user_agent": null,
+  "proxy": null,
+  "retries": 0,
+  "retry_delay_sec": 2,
+  "ui_spacing": "comfortable",
+  "page_size": 20,
+  "sort_playlists": "asc",
+  "sort_channels": "asc",
+  "volume": 40,
+  "shutdown_minutes": 0,
+  "blacklist": []
+}
