@@ -1,0 +1,7 @@
+# Dependencias opcionales para cmdRadioPy
+
+# Para iconos en la interfaz (recomendado)
+charstyle>=1.0.0
+
+# Para mejor soporte de colores en Windows (opcional)
+colorama>=0.4.0

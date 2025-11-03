@@ -63,7 +63,7 @@ def _read_key_blocking() -> str:
 		fd = sys.stdin.fileno()
 		old_settings = termios.tcgetattr(fd)
 		try:
-			ty.setraw(fd)
+			tty.setraw(fd)
 			while True:
 				r, _, _ = select.select([sys.stdin], [], [], 0.05)
 				if r:

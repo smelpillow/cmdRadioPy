@@ -9,7 +9,14 @@ Reproductor de listas M3U para terminal usando mpv.
   - Linux: `sudo apt install mpv` o el gestor de paquetes equivalente
   - macOS: `brew install mpv`
 - Python 3.9+
+- (Recomendado) Para iconos en la interfaz: `pip install charstyle` (si no está instalado, se usarán caracteres Unicode básicos)
 - (Opcional) Para mejor soporte de colores en Windows: `pip install colorama`
+
+### Instalación rápida de dependencias
+
+```bash
+pip install -r requirements.txt
+```
 
 ## Uso rápido
 
@@ -25,13 +32,28 @@ python main.py
    - 2. Buscar en canales (búsqueda global en tus playlists) — atajo `/`
    - 3. Reproducción aleatoria (global) — atajo `r`
    - 4. Buscar online (Radio Browser) — atajo `b`
-   - 5. Favoritos (incluye exportar/importar y aleatorio)
-   - 6. Historial (incluye exportar/importar y aleatorio)
-   - 7 / Q. Salir
+   - 5. Favoritos (incluye editar, exportar JSON/M3U, importar, validar URLs, buscar y aleatorio)
+   - 6. Historial (incluye exportar/importar, limpiar, reproducir último y aleatorio)
+   - 7. Configuración (incluye exportar/importar configuración completa) — atajo `c`
+   - u / l. Reproducir último canal escuchado
+   - s. Estadísticas (top emisoras, resumen, fuentes más usadas)
+   - 8 / Q. Salir
 
 4. Durante la reproducción usa la interfaz nativa de mpv (pulsa `q` para salir, etc.).
 
 5. mpv se lanza en modo solo audio desactivando el vídeo (`--no-video --vid=no`).
+
+### Validación de URLs
+
+Puedes activar la validación de URLs desde el menú de configuración (opción `v`). Cuando está activada, el programa comprobará si una URL está disponible antes de intentar reproducirla. Esto ayuda a evitar errores con emisoras que ya no están activas.
+
+- **Activación**: Menú principal → 7 (Configuración) → `v`
+- **Configuración**: Al activar, puedes establecer un timeout de validación (1-30 segundos, por defecto 5)
+- **Funcionamiento**: Usa una petición HTTP ligera para verificar que la URL responde antes de iniciar la reproducción
+
+### Iconos en la interfaz
+
+La interfaz puede mostrar iconos visuales (emojis/Unicode) para mejorar la experiencia. Los iconos están habilitados por defecto y pueden activarse/desactivarse desde el menú de configuración (opción `i`).
 
 ## Atajos e interacción
 
@@ -42,9 +64,15 @@ python main.py
   - `n` siguiente, `p` anterior, `g` ir a página #, `0`/`q` volver
   - `s` alterna orden A↔Z; `/` filtra
 - Selección de canales: `r` aleatorio entre resultados; `f` añadir/eliminar favorito por número
-- Favoritos e Historial: opción `r` para reproducción aleatoria con repetición opcional
+- Favoritos: 
+  - `e` exportar JSON, `m` exportar M3U, `i` importar, `r` aleatorio
+  - `v` validar todas las URLs, `/` buscar/filtrar
+  - Editar favoritos desde el submenú (cambiar nombre/URL)
+- Historial: `l` reproducir último canal, `c` limpiar historial completo, `r` aleatorio
 - Aleatorio: se omiten emisoras en `blacklist` y si falla la reproducción se prueba otra automáticamente (hasta 3 intentos)
 - La interfaz usa colores ANSI; en Windows se habilitan automáticamente si `colorama` está instalado.
+- Los conteos de elementos se muestran en títulos y headers para mejor orientación.
+- Estadísticas: muestra top emisoras, totales, fuentes más escuchadas y últimas reproducciones.
 
 ## Búsqueda online (Radio Browser)
 
@@ -54,7 +82,17 @@ python main.py
 
 ## Configuración (`config.json`)
 
-Archivo opcional en la raíz del proyecto. Campos soportados:
+Archivo opcional ubicado en el directorio de datos del usuario:
+- **Windows**: `%APPDATA%\cmdRadioPy\config.json`
+- **Linux/Mac**: `~/.config/cmdRadioPy/config.json` (o `$XDG_CONFIG_HOME/cmdRadioPy/config.json`)
+
+### Exportar/Importar configuración completa
+
+Desde el menú de configuración (opción 7), puedes:
+- **Exportar (e)**: Guarda en un archivo JSON toda tu configuración, favoritos e historial. Útil para hacer backups o transferir a otro sistema.
+- **Importar (i)**: Restaura configuración, favoritos e historial desde un archivo de exportación. Permite elegir qué importar y muestra un resumen antes de confirmar.
+
+Campos soportados:
 
 - `user_agent`: string (ej. "Mozilla/5.0 ...")
 - `proxy`: string (ej. "http://127.0.0.1:8080")
@@ -67,6 +105,9 @@ Archivo opcional en la raíz del proyecto. Campos soportados:
 - `volume`: volumen por defecto de mpv (0-130), por defecto 40
 - `shutdown_minutes`: tiempo de apagado automático (0 para desactivar)
 - `blacklist`: array de palabras/fragmentos a excluir en aleatorio (coincidencia por texto en nombre/URL)
+- `validate_urls`: boolean, activa validación de URLs antes de reproducir (por defecto `false`)
+- `url_validation_timeout`: segundos de timeout para validación (1-30, por defecto 5)
+- `show_icons`: boolean, mostrar iconos en la interfaz (por defecto `true`)
 
 Ejemplo:
 
@@ -82,19 +123,28 @@ Ejemplo:
   "sort_channels": "asc",
   "volume": 40,
   "shutdown_minutes": 0,
-  "blacklist": ["demo", "prueba"]
+  "blacklist": ["demo", "prueba"],
+  "validate_urls": false,
+  "url_validation_timeout": 5,
+  "show_icons": true
 }
 ```
 
 ## Estructura
 
+### Archivos del proyecto
 - `main.py`: CLI con paginación, columnas, colores, búsqueda, favoritos (export/import/aleatorio), configuración, historial (export/import/aleatorio) y búsqueda online con filtros
 - `m3u_parser.py`: parser de playlists `.m3u/.m3u8`
 - `player.py`: integración con `mpv` en modo audio (sin vídeo)
-- `playlists/`: tus listas
-- `favorites.json`: favoritos persistentes
-- `history.json`: historial de reproducciones (recientes)
-- `config.json`: configuración de red, reintentos, densidad UI, volumen, temporizador y blacklist
+- `playlists/`: tus listas M3U/M3U8 (dentro del proyecto)
+
+### Archivos de usuario (directorio de datos)
+Los siguientes archivos se guardan automáticamente en el directorio de datos del usuario:
+- **Windows**: `%APPDATA%\cmdRadioPy\`
+- **Linux/Mac**: `~/.config/cmdRadioPy/`
+  - `config.json`: configuración de red, reintentos, densidad UI, volumen, temporizador y blacklist
+  - `favorites.json`: favoritos persistentes
+  - `history.json`: historial de reproducciones (recientes)
 
 ## Notas
 

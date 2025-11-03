@@ -5,7 +5,43 @@ import random
 import shutil
 import json
 import time
+from datetime import datetime
 from typing import List, Dict, Optional
+
+try:
+	from charstyle import Icon
+	CHARSTYLE_AVAILABLE = True
+except ImportError:
+	CHARSTYLE_AVAILABLE = False
+	# Fallback a caracteres Unicode básicos si charstyle no está disponible
+	class Icon:
+		MUSIC = "♪"
+		RADIO = "📻"
+		PLAYLIST = "📋"
+		SEARCH = "🔍"
+		RANDOM = "🎲"
+		ONLINE = "🌐"
+		FAVORITE = "⭐"
+		HISTORY = "📜"
+		CONFIG = "⚙️"
+		EXIT = "🚪"
+		PLAY = "▶"
+		PAUSE = "⏸"
+		STOP = "⏹"
+		CHECK = "✓"
+		CROSS = "✗"
+		WARNING = "⚠"
+		ARROW_RIGHT = "→"
+		ARROW_LEFT = "←"
+		EDIT = "✎"
+		EXPORT = "📤"
+		IMPORT = "📥"
+		TRASH = "🗑"
+		STAR = "★"
+		VOLUME = "🔊"
+		STATS = "📊"
+		LAST = "⏮"
+		FILTER = "🔎"
 
 from m3u_parser import parse_m3u_file
 from player import play_url, MpvNotFoundError
@@ -13,9 +49,24 @@ from player import play_url, MpvNotFoundError
 
 BASE_DIR = os.path.dirname(__file__)
 PLAYLISTS_DIR = os.path.join(BASE_DIR, 'playlists')
-FAVORITES_FILE = os.path.join(BASE_DIR, 'favorites.json')
-HISTORY_FILE = os.path.join(BASE_DIR, 'history.json')
-CONFIG_FILE = os.path.join(BASE_DIR, 'config.json')
+
+# Directorio de datos del usuario
+def get_user_data_dir() -> str:
+	"""Retorna el directorio de datos del usuario según el SO."""
+	if os.name == 'nt':  # Windows
+		appdata = os.getenv('APPDATA') or os.path.expanduser('~')
+		data_dir = os.path.join(appdata, 'cmdRadioPy')
+	else:  # Linux/Mac
+		config_home = os.getenv('XDG_CONFIG_HOME') or os.path.expanduser('~/.config')
+		data_dir = os.path.join(config_home, 'cmdRadioPy')
+	# Asegurar que el directorio existe
+	os.makedirs(data_dir, exist_ok=True)
+	return data_dir
+
+USER_DATA_DIR = get_user_data_dir()
+FAVORITES_FILE = os.path.join(USER_DATA_DIR, 'favorites.json')
+HISTORY_FILE = os.path.join(USER_DATA_DIR, 'history.json')
+CONFIG_FILE = os.path.join(USER_DATA_DIR, 'config.json')
 
 # Estado de configuración (editable en tiempo de ejecución)
 CURRENT_PAGE_SIZE = 20
@@ -37,6 +88,51 @@ class Colors:
 	MAGENTA = "\033[35m"
 	CYAN = "\033[36m"
 	WHITE = "\033[37m"
+
+
+# --- Iconos ---
+# Mapeo de nuestros nombres de iconos a charstyle
+ICON_MAP = {
+	'MUSIC': Icon.MUSIC if hasattr(Icon, 'MUSIC') else '♪',
+	'RADIO': Icon.RADIO if hasattr(Icon, 'RADIO') else '📻',
+	'PLAYLIST': Icon.LIST if hasattr(Icon, 'LIST') else Icon.FOLDER if hasattr(Icon, 'FOLDER') else '📋',
+	'SEARCH': Icon.SEARCH if hasattr(Icon, 'SEARCH') else '🔍',
+	'RANDOM': Icon.DICE if hasattr(Icon, 'DICE') else '🎲',
+	'ONLINE': Icon.GLOBE if hasattr(Icon, 'GLOBE') else Icon.WEB if hasattr(Icon, 'WEB') else '🌐',
+	'FAVORITE': Icon.STAR if hasattr(Icon, 'STAR') else '⭐',
+	'HISTORY': Icon.CLOCK if hasattr(Icon, 'CLOCK') else Icon.TIME if hasattr(Icon, 'TIME') else '📜',
+	'CONFIG': Icon.GEAR if hasattr(Icon, 'GEAR') else Icon.SETTINGS if hasattr(Icon, 'SETTINGS') else '⚙️',
+	'EXIT': Icon.EXIT if hasattr(Icon, 'EXIT') else Icon.DOOR if hasattr(Icon, 'DOOR') else '🚪',
+	'PLAY': Icon.PLAY if hasattr(Icon, 'PLAY') else '▶',
+	'PAUSE': Icon.PAUSE if hasattr(Icon, 'PAUSE') else '⏸',
+	'STOP': Icon.STOP if hasattr(Icon, 'STOP') else '⏹',
+	'CHECK': Icon.CHECK if hasattr(Icon, 'CHECK') else Icon.TICK if hasattr(Icon, 'TICK') else '✓',
+	'CROSS': Icon.CROSS if hasattr(Icon, 'CROSS') else Icon.X if hasattr(Icon, 'X') else '✗',
+	'WARNING': Icon.WARNING if hasattr(Icon, 'WARNING') else Icon.ALERT if hasattr(Icon, 'ALERT') else '⚠',
+	'INFO': Icon.INFO if hasattr(Icon, 'INFO') else 'ℹ',
+	'ARROW_RIGHT': Icon.ARROW_RIGHT if hasattr(Icon, 'ARROW_RIGHT') else '→',
+	'ARROW_LEFT': Icon.ARROW_LEFT if hasattr(Icon, 'ARROW_LEFT') else '←',
+	'EDIT': Icon.EDIT if hasattr(Icon, 'EDIT') else Icon.PENCIL if hasattr(Icon, 'PENCIL') else '✎',
+	'EXPORT': Icon.UPLOAD if hasattr(Icon, 'UPLOAD') else Icon.EXPORT if hasattr(Icon, 'EXPORT') else '📤',
+	'IMPORT': Icon.DOWNLOAD if hasattr(Icon, 'DOWNLOAD') else Icon.IMPORT if hasattr(Icon, 'IMPORT') else '📥',
+	'TRASH': Icon.TRASH if hasattr(Icon, 'TRASH') else Icon.DELETE if hasattr(Icon, 'DELETE') else '🗑',
+	'STAR': Icon.STAR if hasattr(Icon, 'STAR') else '★',
+	'VOLUME': Icon.VOLUME if hasattr(Icon, 'VOLUME') else Icon.SOUND if hasattr(Icon, 'SOUND') else '🔊',
+	'STATS': Icon.CHART if hasattr(Icon, 'CHART') else Icon.STATS if hasattr(Icon, 'STATS') else '📊',
+	'LAST': Icon.PREV if hasattr(Icon, 'PREV') else Icon.REWIND if hasattr(Icon, 'REWIND') else '⏮',
+	'FILTER': Icon.FILTER if hasattr(Icon, 'FILTER') else Icon.SEARCH if hasattr(Icon, 'SEARCH') else '🔎',
+	'VALIDATE': Icon.CHECK if hasattr(Icon, 'CHECK') else Icon.TICK if hasattr(Icon, 'TICK') else '✓',
+	'CLOCK': Icon.CLOCK if hasattr(Icon, 'CLOCK') else Icon.TIME if hasattr(Icon, 'TIME') else '🕐',
+	'LIST': Icon.LIST if hasattr(Icon, 'LIST') else '📑',
+}
+
+
+class Icons:
+	"""Wrapper para iconos usando charstyle si está disponible."""
+	@staticmethod
+	def get_icon(name: str) -> str:
+		"""Obtiene un icono por nombre."""
+		return ICON_MAP.get(name.upper(), "")
 
 
 def enable_colors_on_windows() -> None:
@@ -88,18 +184,20 @@ def header(title: str) -> None:
 		print()
 
 
-def prompt_yes_no(message: str, default_yes: bool = True) -> bool:
-	"""Devuelve True si la respuesta es afirmativa."""
+def prompt_yes_no(message: str, default_yes: bool = True) -> Optional[bool]:
+	"""Devuelve True si la respuesta es afirmativa, None si se cancela con 'q'."""
 	default_hint = 'S/n' if default_yes else 's/N'
 	while True:
-		resp = input(c(f"{message} ({default_hint}): ", Colors.CYAN)).strip().lower()
+		resp = input(c(f"{message} ({default_hint}, q para salir): ", Colors.CYAN)).strip().lower()
 		if not resp:
 			return default_yes
+		if resp in ('q', 'quit', 'salir'):
+			return None  # Cancelar/salir
 		if resp in ('s', 'si', 'sí', 'y', 'yes'):
 			return True
 		if resp in ('n', 'no'):
 			return False
-		print(c("Entrada no válida. Responde con s/n.", Colors.RED))
+		print(c("Entrada no válida. Responde con s/n o q para salir.", Colors.RED))
 
 
 def ensure_playlists_dir() -> None:
@@ -121,6 +219,9 @@ def load_config() -> Dict[str, Optional[str]]:
 		'volume': 40,
 		'shutdown_minutes': 0,
 		'blacklist': [],  # lista de patrones (strings) para excluir en aleatorio
+		'validate_urls': False,  # validar URLs antes de reproducir
+		'url_validation_timeout': 5,  # timeout en segundos para validación
+		'show_icons': True,  # mostrar iconos en la interfaz
 	}
 	if os.path.isfile(CONFIG_FILE):
 		try:
@@ -144,6 +245,19 @@ def save_config() -> None:
 def is_ui_comfortable() -> bool:
 	mode = (CONFIG.get('ui_spacing') or 'comfortable').lower()
 	return mode != 'compact'
+
+
+def icons_enabled() -> bool:
+	"""Retorna True si los iconos están habilitados."""
+	return CONFIG.get('show_icons') is not False  # Por defecto True
+
+
+def icon(name: str) -> str:
+	"""Retorna un icono si están habilitados."""
+	if not icons_enabled():
+		return ""
+	icon_char = Icons.get_icon(name.upper())
+	return f"{icon_char} " if icon_char else ""
 
 
 def build_mpv_args_from_config() -> List[str]:
@@ -273,12 +387,12 @@ def online_search_radio_browser() -> None:
 		labels = [f"{r['name']} {dim(r['source'])}" for r in results]
 		print()
 		header(f"Resultados online ({len(results)})")
-		print(f"  {c('r', Colors.GREEN)} Aleatorio entre resultados  |  {c('0', Colors.YELLOW)} Volver (q)")
+		print(f"  {c('1.', Colors.YELLOW)} Aleatorio entre resultados (r)  |  {c('0.', Colors.YELLOW)} Volver (q)")
 		print(c(line(), Colors.BLUE))
-		sel = input(c("Pulsa 'r' para aleatorio o enter para listar: ", Colors.CYAN)).strip().lower()
-		if sel == 'q':
+		sel = input(c("Selecciona: ", Colors.CYAN)).strip().lower()
+		if sel in ('0', 'q'):
 			return
-		if sel == 'r':
+		if sel in ('1', 'r'):
 			attempts = 0
 			while True:
 				pool = results
@@ -300,9 +414,11 @@ def online_search_radio_browser() -> None:
 					else:
 						print(c("Demasiados fallos, saliendo del aleatorio.", Colors.RED))
 						return
+				# Solo añadir al historial y ofrecer favoritos si la reproducción fue exitosa
 				append_history(item['name'], item['url'], 'online')
 				offer_add_favorite(item['name'], item['url'], 'online')
-				if not prompt_yes_no("¿Reproducir otra emisora aleatoria online?", default_yes=True):
+				result = prompt_yes_no("¿Reproducir otra emisora aleatoria online?", default_yes=True)
+				if result is None or not result:
 					return
 			continue
 		idx = paginated_select(labels, "Resultados online")
@@ -311,14 +427,69 @@ def online_search_radio_browser() -> None:
 		item = results[idx - 1]
 		print(f"{c('Reproduciendo:', Colors.GREEN)} {item['name']} {dim(item['source'])}")
 		try:
-			play_with_config(item['url'])
+			code = play_with_config(item['url'])
 		except MpvNotFoundError as e:
 			print(str(e))
-		append_history(item['name'], item['url'], 'online')
-		offer_add_favorite(item['name'], item['url'], 'online')
+			return
+		# Solo añadir al historial y ofrecer favoritos si la reproducción fue exitosa
+		if code == 0:
+			append_history(item['name'], item['url'], 'online')
+			offer_add_favorite(item['name'], item['url'], 'online')
+
+
+def validate_url(url: str, timeout: int = 5) -> bool:
+	"""
+	Valida si una URL está activa haciendo una petición HEAD.
+	Retorna True si la URL responde, False en caso contrario.
+	"""
+	import urllib.request
+	import urllib.error
+	
+	# Algunos servidores de streaming no responden bien a HEAD, así que usamos GET con range
+	try:
+		req = urllib.request.Request(url, method='GET')
+		req.add_header('Range', 'bytes=0-1')  # Solo pedir los primeros bytes
+		req.add_header('User-Agent', CONFIG.get('user_agent') or 'cmdRadioPy/1.0')
+		
+		# Configurar proxy si existe
+		if CONFIG.get('proxy'):
+			proxy_handler = urllib.request.ProxyHandler({
+				'http': CONFIG.get('proxy'),
+				'https': CONFIG.get('proxy')
+			})
+			opener = urllib.request.build_opener(proxy_handler)
+		else:
+			opener = urllib.request.build_opener()
+		
+		with opener.open(req, timeout=timeout) as response:
+			# Si obtenemos cualquier respuesta (incluso 206 Partial Content), la URL está activa
+			return response.status in (200, 206, 301, 302, 303, 307, 308)
+	except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError):
+		return False
+	except Exception:
+		# En caso de cualquier otro error, asumimos que la URL no es válida
+		return False
 
 
 def play_with_config(url: str) -> int:
+	# Validar URL si está activada la opción
+	validate = CONFIG.get('validate_urls')
+	if isinstance(validate, bool) and validate:
+		timeout = 5
+		try:
+			timeout = int(CONFIG.get('url_validation_timeout') or 5)
+		except Exception:
+			pass
+		
+		icon_val = icon('VALIDATE')
+		print(c(f"{icon_val}Validando URL...", Colors.CYAN), end='', flush=True)
+		if not validate_url(url, timeout=timeout):
+			cross_icon = Icons.get_icon('CROSS')
+			print(c(f" {cross_icon} URL no disponible", Colors.RED))
+			return 1  # Código de error
+		check_icon = Icons.get_icon('CHECK')
+		print(c(f" {check_icon} URL válida", Colors.GREEN))
+	
 	extra = build_mpv_args_from_config()
 	retries = 0
 	try:
@@ -341,13 +512,17 @@ def play_with_config(url: str) -> int:
 		time.sleep(max(0, delay))
 
 
-def append_history(name: str, url: str, source: Optional[str]) -> None:
+def append_history(name: str, url: str, source: Optional[str], duration: Optional[float] = None, attrs: Optional[Dict] = None) -> None:
 	entry = {
 		'name': name or url,
 		'url': url,
 		'source': source or '',
 		'ts': int(time.time()),
 	}
+	if duration is not None:
+		entry['duration'] = duration
+	if attrs:
+		entry['attrs'] = attrs
 	hist: List[Dict[str, str]] = []
 	if os.path.isfile(HISTORY_FILE):
 		try:
@@ -366,6 +541,112 @@ def append_history(name: str, url: str, source: Optional[str]) -> None:
 			json.dump(hist, f, ensure_ascii=False, indent=2)
 	except Exception:
 		pass
+
+
+def _matches_metadata_filter(channel: Dict, filters: Dict) -> bool:
+	"""Verifica si un canal coincide con los filtros de metadatos."""
+	attrs = channel.get('attrs', {})
+	
+	# Filtro por género
+	if 'genre' in filters:
+		genre_filter = filters['genre'].lower()
+		group_title = (attrs.get('group-title') or '').lower()
+		if genre_filter not in group_title:
+			return False
+	
+	# Filtro por país
+	if 'country' in filters:
+		country_filter = filters['country'].lower()
+		tvg_country = (attrs.get('tvg-country') or attrs.get('country') or '').lower()
+		if country_filter not in tvg_country:
+			return False
+	
+	# Filtro por idioma
+	if 'language' in filters:
+		lang_filter = filters['language'].lower()
+		tvg_lang = (attrs.get('tvg-language') or attrs.get('language') or '').lower()
+		if lang_filter not in tvg_lang:
+			return False
+	
+	# Filtro por bitrate mínimo
+	if 'min_bitrate' in filters:
+		min_bitrate = filters['min_bitrate']
+		audio_bitrate = attrs.get('audio-bitrate') or attrs.get('bitrate')
+		if audio_bitrate:
+			try:
+				bitrate_val = int(audio_bitrate)
+				if bitrate_val < min_bitrate:
+					return False
+			except ValueError:
+				pass
+		else:
+			return False  # Si no tiene bitrate y se requiere, excluir
+	
+	return True
+
+
+def format_channel_metadata(channel: Dict) -> str:
+	"""Formatea los metadatos de un canal para mostrar."""
+	attrs = channel.get('attrs', {})
+	parts = []
+	
+	# Bitrate
+	if 'audio-bitrate' in attrs:
+		parts.append(f"Bitrate: {attrs['audio-bitrate']} kbps")
+	elif 'bitrate' in attrs:
+		parts.append(f"Bitrate: {attrs['bitrate']} kbps")
+	
+	# Género
+	if 'group-title' in attrs:
+		parts.append(f"Género: {attrs['group-title']}")
+	
+	# País
+	if 'tvg-country' in attrs:
+		parts.append(f"País: {attrs['tvg-country']}")
+	elif 'country' in attrs:
+		parts.append(f"País: {attrs['country']}")
+	
+	# Idioma
+	if 'tvg-language' in attrs:
+		parts.append(f"Idioma: {attrs['tvg-language']}")
+	elif 'language' in attrs:
+		parts.append(f"Idioma: {attrs['language']}")
+	
+	# URL type hint
+	url = channel.get('url', '')
+	if url.startswith('http'):
+		if 'm3u8' in url.lower():
+			parts.append("Formato: HLS")
+		elif '.mp3' in url.lower():
+			parts.append("Formato: MP3")
+		elif '.aac' in url.lower():
+			parts.append("Formato: AAC")
+		else:
+			parts.append("Formato: Stream")
+	
+	return " | ".join(parts) if parts else "Sin metadatos"
+
+
+def show_channel_preview(channel: Dict, source: Optional[str] = None) -> None:
+	"""Muestra una previsualización de información del canal antes de reproducir."""
+	name = channel.get('name') or channel.get('url') or 'Unknown'
+	url = channel.get('url') or ''
+	attrs = channel.get('attrs', {})
+	
+	print()
+	header(f"Información del canal")
+	print(c(f"Nombre: {name}", Colors.CYAN))
+	if source:
+		print(c(f"Fuente: {source}", Colors.DIM))
+	
+	metadata = format_channel_metadata(channel)
+	if metadata:
+		print(c(f"Metadatos: {metadata}", Colors.DIM))
+	
+	if url:
+		url_preview = url[:80] + '...' if len(url) > 80 else url
+		print(c(f"URL: {url_preview}", Colors.DIM))
+	print()
 
 
 def load_history() -> List[Dict[str, str]]:
@@ -420,7 +701,7 @@ def truncate_label(label: str, max_len: int) -> str:
 	return label[: max_len - 1] + '…'
 
 
-def paginated_select(options: List[str], title: str, page_size: int = None) -> int:
+def paginated_select(options: List[str], title: str, page_size: int = None, show_count: bool = True) -> int:
 	if page_size is None:
 		page_size = CURRENT_PAGE_SIZE
 	if not options:
@@ -431,7 +712,8 @@ def paginated_select(options: List[str], title: str, page_size: int = None) -> i
 	while True:
 		start = page * page_size
 		end = min(start + page_size, total)
-		header(f"{title}  {dim(f'(página {page + 1}/{pages})')}")
+		count_info = f" ({total})" if show_count and total > 0 else ""
+		header(f"{title}{count_info}  {dim(f'(página {page + 1}/{pages})')}")
 
 		# Preparar grid en columnas con numeración global y truncado
 		visible = options[start:end]
@@ -482,8 +764,8 @@ def paginated_select(options: List[str], title: str, page_size: int = None) -> i
 		print()
 		print(f"  {c('0.', Colors.YELLOW)} Volver (q)")
 		if pages > 1:
-			print(f"  {c('n', Colors.GREEN)} Siguiente página    {c('p', Colors.GREEN)} Página anterior    {c('g', Colors.GREEN)} Ir a página")
-		print(f"  {c('s', Colors.GREEN)} Alternar orden (A↔Z)    {c('/', Colors.GREEN)} Filtrar")
+			print(f"  {c('n', Colors.GREEN)} Siguiente página (n)    {c('p', Colors.GREEN)} Página anterior (p)    {c('g', Colors.GREEN)} Ir a página (g)")
+		print(f"  {c('s', Colors.GREEN)} Alternar orden (A↔Z) (s)    {c('/', Colors.GREEN)} Filtrar (/)")
 		print(c(line(), Colors.BLUE))
 		choice = input(c("Selecciona: ", Colors.CYAN)).strip().lower()
 		if choice == 'q':
@@ -565,7 +847,8 @@ def add_favorite(name: str, url: str, source: Optional[str]) -> None:
 
 
 def offer_add_favorite(name: str, url: str, source: Optional[str]) -> None:
-	if prompt_yes_no("¿Añadir a favoritos?", default_yes=False):
+	result = prompt_yes_no("¿Añadir a favoritos?", default_yes=False)
+	if result is True:
 		add_favorite(name, url, source)
 
 
@@ -585,25 +868,114 @@ def favorites_menu() -> None:
 			return f"{name} {badge}"
 		options = [fav_label(fav) for fav in favs]
 		print()
-		header("Favoritos")
-		print(f"  {c('e', Colors.GREEN)} Exportar favoritos  |  {c('i', Colors.GREEN)} Importar favoritos  |  {c('r', Colors.GREEN)} Aleatorio  |  {c('0', Colors.YELLOW)} Volver (q)")
+		header(f"Favoritos ({len(favs)})")
+		print(f"  {c('1.', Colors.YELLOW)} {icon('EXPORT')}Exportar JSON (e)  |  {c('2.', Colors.YELLOW)} {icon('EXPORT')}Exportar M3U (m)  |  {c('3.', Colors.YELLOW)} {icon('IMPORT')}Importar (i)  |  {c('4.', Colors.YELLOW)} {icon('RANDOM')}Aleatorio (r)  |  {c('5.', Colors.YELLOW)} {icon('VALIDATE')}Validar URLs (v)  |  {c('6.', Colors.YELLOW)} {icon('FILTER')}Buscar (/)  |  {c('0.', Colors.YELLOW)} Volver (q)")
 		print(c(line(), Colors.BLUE))
-		cmd = input(c("Pulsa 'e'/'i'/'r' o enter para listar: ", Colors.CYAN)).strip().lower()
+		cmd = input(c("Selecciona: ", Colors.CYAN)).strip().lower()
 		if cmd in ('0', 'q'):
 			return
-		if cmd == 'e':
+		if cmd in ('6', '/'):
+			# Buscar en favoritos
+			query = input(c("Buscar en favoritos (nombre/URL): ", Colors.CYAN)).strip().lower()
+			if query:
+				filtered_favs = [f for f in favs if query in (f.get('name') or '').lower() or query in (f.get('url') or '').lower()]
+				if filtered_favs:
+					favs = filtered_favs
+					options = [fav_label(fav) for fav in favs]
+					continue
+				else:
+					print(c("No se encontraron favoritos.", Colors.YELLOW))
+					input(c("Pulsa enter para continuar... ", Colors.CYAN))
+					continue
+			else:
+				# Recargar lista completa
+				favs = load_favorites()
+				options = [fav_label(fav) for fav in favs]
+				continue
+		if cmd in ('1', 'e'):
 			path = input(c("Ruta destino (ej. favorites_export.json): ", Colors.CYAN)).strip()
 			if not path:
 				print(c("Ruta inválida.", Colors.RED))
 			else:
+				# Asegurar extensión .json
+				if not path.lower().endswith('.json'):
+					path += '.json'
 				try:
 					with open(path, 'w', encoding='utf-8') as f:
 						json.dump(favs, f, ensure_ascii=False, indent=2)
-					print(c("Favoritos exportados.", Colors.GREEN))
+					print(c(f"Favoritos exportados a {path}.", Colors.GREEN))
 				except Exception as e:
 					print(c(f"Error exportando: {e}", Colors.RED))
+			input(c("Pulsa enter para continuar... ", Colors.CYAN))
 			continue
-		if cmd == 'i':
+		if cmd in ('2', 'm'):
+			# Exportar a formato M3U
+			path = input(c("Ruta destino (ej. favorites.m3u): ", Colors.CYAN)).strip()
+			if not path:
+				print(c("Ruta inválida.", Colors.RED))
+			else:
+				# Asegurar extensión .m3u
+				if not path.lower().endswith('.m3u'):
+					path += '.m3u'
+				try:
+					with open(path, 'w', encoding='utf-8') as f:
+						f.write('#EXTM3U\n')
+						for fav in favs:
+							name = fav.get('name') or fav.get('url') or 'Unknown'
+							url = fav.get('url') or ''
+							source = fav.get('source') or ''
+							if url:
+								# Formato: #EXTINF:-1 group-title="source",name
+								if source:
+									f.write(f'#EXTINF:-1 group-title="{source}",{name}\n')
+								else:
+									f.write(f'#EXTINF:-1,{name}\n')
+								f.write(f'{url}\n')
+					print(c(f"Favoritos exportados a formato M3U: {path}", Colors.GREEN))
+					print(c(f"  - {len(favs)} emisoras exportadas", Colors.DIM))
+				except Exception as e:
+					print(c(f"Error exportando: {e}", Colors.RED))
+			input(c("Pulsa enter para continuar... ", Colors.CYAN))
+			continue
+		if cmd in ('5', 'v'):
+			# Validar URLs de favoritos
+			if not favs:
+				print(c("No hay favoritos para validar.", Colors.YELLOW))
+				input(c("Pulsa enter para continuar... ", Colors.CYAN))
+				continue
+			header("Validando URLs de favoritos")
+			print(c(f"Validando {len(favs)} favoritos...", Colors.CYAN))
+			validated = []
+			invalid = []
+			for i, fav in enumerate(favs, 1):
+				name = fav.get('name') or fav.get('url') or ''
+				url = fav.get('url') or ''
+				print(c(f"[{i}/{len(favs)}] {name[:50]}...", Colors.DIM), end=' ', flush=True)
+				if validate_url(url, timeout=5):
+					print(c("✓", Colors.GREEN))
+					validated.append(fav)
+				else:
+					print(c("✗", Colors.RED))
+					invalid.append(fav)
+			
+			print()
+			print(c(f"Resultados: {len(validated)} válidas, {len(invalid)} inválidas", Colors.CYAN))
+			if invalid:
+				print()
+				print(c("Favoritos con URLs inválidas:", Colors.YELLOW))
+				for fav in invalid:
+					print(f"  - {fav.get('name') or fav.get('url')}")
+				result = prompt_yes_no("¿Eliminar favoritos con URLs inválidas?", default_yes=False)
+				if result is True:
+					favs = validated
+					save_favorites(favs)
+					print(c(f"{len(invalid)} favoritos eliminados.", Colors.GREEN))
+			input(c("Pulsa enter para continuar... ", Colors.CYAN))
+			# Recargar lista actualizada
+			favs = load_favorites()
+			options = [fav_label(fav) for fav in favs]
+			continue
+		if cmd in ('3', 'i'):
 			src = input(c("Ruta origen (archivo JSON de favoritos): ", Colors.CYAN)).strip()
 			try:
 				with open(src, 'r', encoding='utf-8') as f:
@@ -616,18 +988,29 @@ def favorites_menu() -> None:
 			except Exception as e:
 				print(c(f"Error importando: {e}", Colors.RED))
 			continue
-		if cmd == 'r':
+		if cmd in ('4', 'r'):
+			attempts = 0
 			while True:
 				fav = random.choice(favs)
 				name = fav.get('name') or fav.get('url') or ''
 				print(f"{c('Reproduciendo (aleatorio favoritos):', Colors.GREEN)} {name}")
 				try:
-					play_with_config(fav.get('url') or '')
+					code = play_with_config(fav.get('url') or '')
 				except MpvNotFoundError as e:
 					print(str(e))
 					break
+				if code != 0:
+					attempts += 1
+					if attempts <= 3:
+						print(c("Fallo, probando otro favorito...", Colors.YELLOW))
+						continue
+					else:
+						print(c("Demasiados fallos, saliendo del aleatorio.", Colors.RED))
+						break
+				# Solo añadir al historial si la reproducción fue exitosa
 				append_history(name, fav.get('url') or '', 'favoritos')
-				if not prompt_yes_no("¿Reproducir otro favorito aleatorio?", default_yes=True):
+				result = prompt_yes_no("¿Reproducir otro favorito aleatorio?", default_yes=True)
+				if result is None or not result:
 					break
 			continue
 		idx = paginated_select(options, "Favoritos")
@@ -637,8 +1020,9 @@ def favorites_menu() -> None:
 		# Submenú del favorito
 		while True:
 			header(f"Favorito: {fav.get('name')}")
-			print(f"  {c('1.', Colors.YELLOW)} Reproducir")
-			print(f"  {c('2.', Colors.YELLOW)} Eliminar")
+			print(f"  {c('1.', Colors.YELLOW)} {icon('PLAY')}Reproducir")
+			print(f"  {c('2.', Colors.YELLOW)} {icon('EDIT')}Editar")
+			print(f"  {c('3.', Colors.YELLOW)} {icon('TRASH')}Eliminar")
 			print(f"  {c('0.', Colors.YELLOW)} Volver (q)")
 			print(c(line(), Colors.BLUE))
 			opt = input(c("Selecciona: ", Colors.CYAN)).strip().lower()
@@ -646,15 +1030,55 @@ def favorites_menu() -> None:
 				break
 			elif opt == '1':
 				try:
-					play_url(fav.get('url'))
+					play_with_config(fav.get('url') or '')
 				except MpvNotFoundError as e:
 					print(str(e))
 			elif opt == '2':
+				# Editar favorito
+				print()
+				header("Editar favorito")
+				current_name = fav.get('name') or ''
+				current_url = fav.get('url') or ''
+				print(c(f"Nombre actual: {current_name}", Colors.DIM))
+				new_name = input(c("Nuevo nombre (enter para mantener): ", Colors.CYAN)).strip()
+				print(c(f"URL actual: {current_url}", Colors.DIM))
+				new_url = input(c("Nueva URL (enter para mantener): ", Colors.CYAN)).strip()
+				
+				updated = False
+				if new_name:
+					fav['name'] = new_name
+					updated = True
+				if new_url:
+					# Validar que no exista otra URL igual
+					if any((f.get('url') or '').strip() == new_url.strip() and (f.get('url') or '').strip() != current_url for f in favs):
+						print(c("Ya existe otro favorito con esa URL.", Colors.RED))
+						input(c("Pulsa enter para continuar... ", Colors.CYAN))
+						continue
+					fav['url'] = new_url
+					updated = True
+				
+				if updated:
+					# Actualizar en la lista
+					for i, f in enumerate(favs):
+						if (f.get('url') or '').strip() == current_url:
+							favs[i] = fav
+							break
+					save_favorites(favs)
+					fav = fav  # Actualizar referencia local
+					print(c("Favorito actualizado.", Colors.GREEN))
+				else:
+					print(c("No se realizaron cambios.", Colors.YELLOW))
+				input(c("Pulsa enter para continuar... ", Colors.CYAN))
+			elif opt == '3':
 				# Eliminar favorito
-				favs = [x for x in favs if (x.get('url') or '').strip() != (fav.get('url') or '').strip()]
-				save_favorites(favs)
-				print(c("Eliminado de favoritos.", Colors.GREEN))
-				break
+				result = prompt_yes_no("¿Eliminar este favorito?", default_yes=False)
+				if result is True:
+					favs = [x for x in favs if (x.get('url') or '').strip() != (fav.get('url') or '').strip()]
+					save_favorites(favs)
+					print(c("Eliminado de favoritos.", Colors.GREEN))
+					break
+				elif result is None:
+					break  # Cancelar con 'q'
 			else:
 				print(c("Opción no válida.", Colors.RED))
 
@@ -691,24 +1115,35 @@ def global_search(playlists: List[str]) -> None:
 			labels.append(f"{r['name']} {badge}")
 		print()
 		header(f"Resultados ({len(results)})")
-		print(f"  {c('r', Colors.GREEN)} Aleatorio entre resultados  |  {c('0', Colors.YELLOW)} Volver (q)")
+		print(f"  {c('1.', Colors.YELLOW)} Aleatorio entre resultados (r)  |  {c('0.', Colors.YELLOW)} Volver (q)")
 		print(c(line(), Colors.BLUE))
-		sel = input(c("Pulsa 'r' para aleatorio o enter para listar: ", Colors.CYAN)).strip().lower()
-		if sel == 'q':
+		sel = input(c("Selecciona: ", Colors.CYAN)).strip().lower()
+		if sel in ('0', 'q'):
 			return
-		if sel == 'r':
+		if sel in ('1', 'r'):
 			# Bucle aleatorio sobre resultados + oferta favoritos
+			attempts = 0
 			while True:
 				item = random.choice(results)
 				print(f"{c('Reproduciendo (aleatorio):', Colors.GREEN)} {item['name']} {dim(f'[{item['source']}]')}")
 				try:
-					play_with_config(item['url'])
+					code = play_with_config(item['url'])
 				except MpvNotFoundError as e:
 					print(str(e))
 					return
+				if code != 0:
+					attempts += 1
+					if attempts <= 3:
+						print(c("Fallo, probando otra emisora...", Colors.YELLOW))
+						continue
+					else:
+						print(c("Demasiados fallos, saliendo del aleatorio.", Colors.RED))
+						return
+				# Solo añadir al historial y ofrecer favoritos si la reproducción fue exitosa
 				append_history(item['name'], item['url'], item['source'])
 				offer_add_favorite(item['name'], item['url'], item['source'])
-				if not prompt_yes_no("¿Reproducir otra emisora aleatoria de los resultados?", default_yes=True):
+				result = prompt_yes_no("¿Reproducir otra emisora aleatoria de los resultados?", default_yes=True)
+				if result is None or not result:
 					return
 			continue
 		# Selección paginada
@@ -763,13 +1198,13 @@ def select_and_play(channels: List[Dict], source: Optional[str] = None) -> None:
 
 		options = [c_.get('name') or c_.get('url') for c_ in filtered]
 		print()
-		header("Selección de canales")
-		print(f"  {c('r', Colors.GREEN)} Aleatorio entre resultados  |  {c('f', Colors.GREEN)} Favorito por número  |  {c('0', Colors.YELLOW)} Volver (q)")
+		header(f"Selección de canales ({len(filtered)} disponibles)")
+		print(f"  {c('1.', Colors.YELLOW)} Aleatorio entre resultados (r)  |  {c('2.', Colors.YELLOW)} Favorito por número (f)  |  {c('0.', Colors.YELLOW)} Volver (q)")
 		print(c(line(), Colors.BLUE))
-		selection = input(c("Pulsa 'r' aleatorio, 'f' favorito o enter para listar: ", Colors.CYAN)).strip().lower()
-		if selection == 'q':
+		selection = input(c("Selecciona: ", Colors.CYAN)).strip().lower()
+		if selection in ('0', 'q'):
 			return
-		if selection == 'r':
+		if selection in ('1', 'r'):
 			attempts = 0
 			while True:
 				if not filtered:
@@ -792,9 +1227,11 @@ def select_and_play(channels: List[Dict], source: Optional[str] = None) -> None:
 					else:
 						print(c("Demasiados fallos, saliendo del aleatorio.", Colors.RED))
 						return
+				# Solo añadir al historial y ofrecer favoritos si la reproducción fue exitosa
 				append_history(name, url, source)
 				offer_add_favorite(name, url, source)
-				if not prompt_yes_no("¿Reproducir otra emisora aleatoria de los resultados?", default_yes=True):
+				result = prompt_yes_no("¿Reproducir otra emisora aleatoria de los resultados?", default_yes=True)
+				if result is None or not result:
 					return
 			continue
 		elif selection == 'f':
@@ -832,15 +1269,28 @@ def select_and_play(channels: List[Dict], source: Optional[str] = None) -> None:
 		channel = filtered[idx1 - 1]
 		url = channel.get('url')
 		name = channel.get('name') or url
+		
+		# Mostrar previsualización si está habilitada
+		show_preview = CONFIG.get('show_channel_preview', True)
+		if show_preview:
+			show_channel_preview(channel, source)
+			result = prompt_yes_no("¿Reproducir este canal?", default_yes=True)
+			if result is None or not result:
+				continue
+		
 		print(f"{c('Reproduciendo:', Colors.GREEN)} {name}")
+		start_time = time.time()
 		try:
-			play_with_config(url)
+			code = play_with_config(url)
 		except MpvNotFoundError as e:
 			print(str(e))
 			return
-		append_history(name, url, source)
-		# Ofrecer favoritos tras reproducir selección directa
-		offer_add_favorite(name, url, source)
+		# Solo añadir al historial y ofrecer favoritos si la reproducción fue exitosa
+		if code == 0:
+			duration = time.time() - start_time
+			attrs = channel.get('attrs', {})
+			append_history(name, url, source, duration=duration, attrs=attrs)
+			offer_add_favorite(name, url, source)
 
 
 def random_channel_from_all(playlists: List[str]) -> None:
@@ -871,33 +1321,178 @@ def random_channel_from_all(playlists: List[str]) -> None:
 		if code != 0:
 			print(c("Fallo, probando otra emisora...", Colors.YELLOW))
 			continue
+		# Solo añadir al historial y ofrecer favoritos si la reproducción fue exitosa
 		append_history(name, channel.get('url'), pl)
-		if not prompt_yes_no("¿Reproducir otra emisora aleatoria global?", default_yes=True):
+		offer_add_favorite(name, channel.get('url'), pl)
+		result = prompt_yes_no("¿Reproducir otra emisora aleatoria global?", default_yes=True)
+		if result is None or not result:
 			break
 
 def print_ascii_logo() -> None:
-	# Recuadro centrado con el nombre exacto
-	title = "cmdRadioPy"
-	sub = "Reproductor M3U para terminal"
-	inner_w = max(len(title), len(sub)) + 4
+	# Logo ASCII art centrado
+	logo_lines = [
+		"                       ______            ___       ______  __   ",
+		"  _________ ___  ____/ / __ \____ _____/ (_)___  / __ \ \/ /   ",
+		" / ___/ __ `__ \/ __  / /_/ / __ `/ __  / / __ \/ /_/ /\  /    ",
+		"/ /__/ / / / / / /_/ / _, _/ /_/ / /_/ / / /_/ / ____/ / /     ",
+		"\___/_/ /_/ /_/\__,_/_/ |_|\__,_/\__,_/_/\____/_/     /_/      ",
+	]
+	
+	# Calcular padding para centrar
 	w = term_width()
-	box_w = min(inner_w + 2, max(w - 4, inner_w + 2))
-	pad_left = max(0, (w - box_w) // 2)
-
-	top = "╔" + "═" * (box_w - 2) + "╗"
-	bot = "╚" + "═" * (box_w - 2) + "╝"
-	space_line = "║" + " " * (box_w - 2) + "║"
-
-	def center_text(s: str) -> str:
-		inner = box_w - 2
-		pad = max(0, (inner - len(s)) // 2)
-		rem = max(0, inner - len(s) - pad)
-		return "║" + (" " * pad) + s + (" " * rem) + "║"
-
-	lines = [top, space_line, center_text(title), center_text(sub), space_line, bot]
-	for ln in lines:
-		print(" " * pad_left + c(ln, Colors.CYAN))
+	max_logo_width = max(len(line) for line in logo_lines)
+	pad_left = max(0, (w - max_logo_width) // 2)
+	
+	for line in logo_lines:
+		print(" " * pad_left + c(line, Colors.CYAN))
 	print()
+
+# --- Exportar/Importar configuración completa ---
+
+def export_config_complete() -> None:
+	"""Exporta configuración, favoritos e historial a un archivo JSON."""
+	header("Exportar configuración completa")
+	
+	# Recolectar datos
+	config_data = CONFIG.copy()
+	favorites_data = load_favorites()
+	history_data = load_history()
+	
+	export_data = {
+		'version': '1.0',
+		'export_date': time.strftime('%Y-%m-%d %H:%M:%S'),
+		'config': config_data,
+		'favorites': favorites_data,
+		'history': history_data,
+	}
+	
+	path = input(c("Ruta destino (ej. cmdRadioPy_backup.json): ", Colors.CYAN)).strip()
+	if not path:
+		print(c("Ruta inválida.", Colors.RED))
+		input(c("Pulsa enter para volver... ", Colors.CYAN))
+		return
+	
+	# Asegurar extensión .json
+	if not path.lower().endswith('.json'):
+		path += '.json'
+	
+	try:
+		with open(path, 'w', encoding='utf-8') as f:
+			json.dump(export_data, f, ensure_ascii=False, indent=2)
+		print(c(f"Configuración exportada correctamente a: {path}", Colors.GREEN))
+		print(c(f"  - Configuración: {len(config_data)} opciones", Colors.DIM))
+		print(c(f"  - Favoritos: {len(favorites_data)} emisoras", Colors.DIM))
+		print(c(f"  - Historial: {len(history_data)} entradas", Colors.DIM))
+	except Exception as e:
+		print(c(f"Error al exportar: {e}", Colors.RED))
+	
+	input(c("Pulsa enter para volver... ", Colors.CYAN))
+
+
+def import_config_complete() -> None:
+	"""Importa configuración, favoritos e historial desde un archivo JSON."""
+	global CONFIG, CURRENT_PAGE_SIZE, SORT_PLAYLISTS_ASC, SORT_CHANNELS_ASC
+	
+	header("Importar configuración completa")
+	path = input(c("Ruta origen (archivo JSON de exportación): ", Colors.CYAN)).strip()
+	if not path:
+		print(c("Ruta inválida.", Colors.RED))
+		input(c("Pulsa enter para volver... ", Colors.CYAN))
+		return
+	
+	if not os.path.isfile(path):
+		print(c("El archivo no existe.", Colors.RED))
+		input(c("Pulsa enter para volver... ", Colors.CYAN))
+		return
+	
+	try:
+		with open(path, 'r', encoding='utf-8') as f:
+			data = json.load(f)
+	except json.JSONDecodeError:
+		print(c("Error: el archivo no es un JSON válido.", Colors.RED))
+		input(c("Pulsa enter para volver... ", Colors.CYAN))
+		return
+	except Exception as e:
+		print(c(f"Error al importar: {e}", Colors.RED))
+		input(c("Pulsa enter para volver... ", Colors.CYAN))
+		return
+	
+	if not isinstance(data, dict):
+		print(c("Formato de archivo inválido.", Colors.RED))
+		input(c("Pulsa enter para volver... ", Colors.CYAN))
+		return
+	
+	# Confirmar antes de sobrescribir
+	print()
+	config_count = len(data.get('config', {})) if isinstance(data.get('config'), dict) else 0
+	fav_count = len(data.get('favorites', [])) if isinstance(data.get('favorites'), list) else 0
+	hist_count = len(data.get('history', [])) if isinstance(data.get('history'), list) else 0
+	
+	print(c("Datos a importar:", Colors.CYAN))
+	print(c(f"  - Configuración: {config_count} opciones", Colors.DIM))
+	print(c(f"  - Favoritos: {fav_count} emisoras", Colors.DIM))
+	print(c(f"  - Historial: {hist_count} entradas", Colors.DIM))
+	
+	if 'export_date' in data:
+		print(c(f"  - Fecha de exportación: {data.get('export_date')}", Colors.DIM))
+	
+	print()
+	result = prompt_yes_no("¿Importar y sobrescribir configuración actual?", default_yes=False)
+	if result is None or not result:
+		input(c("Pulsa enter para volver... ", Colors.CYAN))
+		return
+	
+	# Preguntar qué importar
+	print()
+	import_config = prompt_yes_no("¿Importar configuración?", default_yes=True)
+	if import_config is None:
+		input(c("Pulsa enter para volver... ", Colors.CYAN))
+		return
+	import_favorites = prompt_yes_no("¿Importar favoritos?", default_yes=True)
+	if import_favorites is None:
+		input(c("Pulsa enter para volver... ", Colors.CYAN))
+		return
+	import_history = prompt_yes_no("¿Importar historial?", default_yes=True)
+	if import_history is None:
+		input(c("Pulsa enter para volver... ", Colors.CYAN))
+		return
+	
+	imported = []
+	
+	# Importar configuración
+	if import_config and isinstance(data.get('config'), dict):
+		CONFIG.update(data['config'])
+		save_config()
+		# Aplicar cambios inmediatos
+		try:
+			ps = int(CONFIG.get('page_size') or 20)
+			if 5 <= ps <= 100:
+				CURRENT_PAGE_SIZE = ps
+		except Exception:
+			pass
+		sort_pl = (CONFIG.get('sort_playlists') or 'asc').lower()
+		SORT_PLAYLISTS_ASC = (sort_pl != 'desc')
+		sort_ch = (CONFIG.get('sort_channels') or 'asc').lower()
+		SORT_CHANNELS_ASC = (sort_ch != 'desc')
+		imported.append("configuración")
+	
+	# Importar favoritos
+	if import_favorites and isinstance(data.get('favorites'), list):
+		save_favorites(data['favorites'])
+		imported.append("favoritos")
+	
+	# Importar historial
+	if import_history and isinstance(data.get('history'), list):
+		save_history(data['history'])
+		imported.append("historial")
+	
+	if imported:
+		print(c(f"Importación exitosa: {', '.join(imported)}", Colors.GREEN))
+	else:
+		print(c("No se importó nada.", Colors.YELLOW))
+	
+	input(c("Pulsa enter para volver... ", Colors.CYAN))
+
 
 # --- Menú de configuración ---
 
@@ -915,6 +1510,16 @@ def config_menu() -> None:
 		print(f"  {c('7.', Colors.YELLOW)} Densidad UI: {'cómodo' if is_ui_comfortable() else 'compacto'}")
 		print(f"  {c('8.', Colors.YELLOW)} Volumen por defecto mpv: {CONFIG.get('volume') or 40}")
 		print(f"  {c('9.', Colors.YELLOW)} Tiempo de apagado (minutos): {CONFIG.get('shutdown_minutes') or 0}")
+		validate_enabled = CONFIG.get('validate_urls') or False
+		validate_status = 'activada' if validate_enabled else 'desactivada'
+		icons_status = 'activados' if icons_enabled() else 'desactivados'
+		print(f"  {c('10.', Colors.YELLOW)} {icon('VALIDATE')}Validar URLs antes de reproducir: {validate_status} (v)")
+		timeout_val = CONFIG.get('url_validation_timeout') or 5
+		if validate_enabled:
+			print(f"     Timeout de validación: {timeout_val}s")
+		print(f"  {c('11.', Colors.YELLOW)} {icon('MUSIC')}Iconos en interfaz: {icons_status} (i)")
+		print(f"  {c('12.', Colors.YELLOW)} {icon('EXPORT')}Exportar configuración completa (e)")
+		print(f"  {c('13.', Colors.YELLOW)} {icon('IMPORT')}Importar configuración completa (x)")
 		print(f"  {c('0.', Colors.YELLOW)} Volver (q)")
 		print(c(line(), Colors.BLUE))
 		opt = input(c("Selecciona: ", Colors.CYAN)).strip().lower()
@@ -985,8 +1590,216 @@ def config_menu() -> None:
 				print(c("Tiempo de apagado actualizado.", Colors.GREEN))
 			else:
 				print(c("Entrada no válida.", Colors.RED))
+		elif opt == 'v':
+			# Toggle validación de URLs
+			current = CONFIG.get('validate_urls') or False
+			CONFIG['validate_urls'] = not current
+			save_config()
+			status = 'activada' if CONFIG['validate_urls'] else 'desactivada'
+			print(c(f"Validación de URLs {status}.", Colors.GREEN))
+			if CONFIG['validate_urls']:
+				# Preguntar por timeout si se activa
+				timeout_val = input(c("Timeout de validación en segundos (1-30, default 5): ", Colors.CYAN)).strip()
+				if timeout_val:
+					try:
+						timeout_int = max(1, min(30, int(timeout_val)))
+						CONFIG['url_validation_timeout'] = timeout_int
+						save_config()
+						print(c(f"Timeout configurado a {timeout_int}s.", Colors.GREEN))
+					except Exception:
+						print(c("Timeout inválido, usando valor por defecto (5s).", Colors.YELLOW))
+						CONFIG['url_validation_timeout'] = 5
+						save_config()
+				else:
+					CONFIG['url_validation_timeout'] = 5
+					save_config()
+		elif opt == 'i':
+			# Toggle iconos
+			current = icons_enabled()
+			CONFIG['show_icons'] = not current
+			save_config()
+			status = 'activados' if CONFIG['show_icons'] else 'desactivados'
+			print(c(f"Iconos {status}.", Colors.GREEN))
+		elif opt in ('12', 'e'):
+			export_config_complete()
+			CONFIG = load_config()  # Recargar configuración por si cambió
+		elif opt in ('13', 'x'):
+			import_config_complete()
+			CONFIG = load_config()  # Recargar configuración después de importar
 		else:
 			print(c("Opción no válida.", Colors.RED))
+
+# --- Menú de estadísticas ---
+
+def format_duration(seconds: float) -> str:
+	"""Formatea una duración en segundos a formato legible."""
+	if seconds < 60:
+		return f"{int(seconds)}s"
+	elif seconds < 3600:
+		mins = int(seconds // 60)
+		secs = int(seconds % 60)
+		return f"{mins}m {secs}s"
+	else:
+		hours = int(seconds // 3600)
+		mins = int((seconds % 3600) // 60)
+		if mins > 0:
+			return f"{hours}h {mins}m"
+		return f"{hours}h"
+
+
+def draw_ascii_bar(value: int, max_value: int, width: int = 30) -> str:
+	"""Dibuja una barra ASCII simple."""
+	if max_value == 0:
+		return ' ' * width
+	fill = int((value / max_value) * width)
+	bar = '█' * fill + '░' * (width - fill)
+	return bar
+
+
+def stats_menu() -> None:
+	header("Estadísticas")
+	
+	# Cargar datos
+	history_entries = load_history()
+	favorites = load_favorites()
+	
+	# Calcular estadísticas básicas
+	total_reproducciones = len(history_entries)
+	total_favoritos = len(favorites)
+	
+	# Calcular tiempo total de reproducción
+	total_duration = 0.0
+	for entry in history_entries:
+		duration = entry.get('duration', 0)
+		if isinstance(duration, (int, float)) and duration > 0:
+			total_duration += duration
+	
+	# Emisoras más reproducidas
+	station_counts: Dict[str, int] = {}
+	station_durations: Dict[str, float] = {}
+	for entry in history_entries:
+		name = entry.get('name') or entry.get('url') or 'Unknown'
+		url = entry.get('url') or ''
+		key = url if url else name
+		station_counts[key] = station_counts.get(key, 0) + 1
+		duration = entry.get('duration', 0)
+		if isinstance(duration, (int, float)) and duration > 0:
+			station_durations[key] = station_durations.get(key, 0.0) + duration
+	
+	# Ordenar por número de reproducciones
+	sorted_stations = sorted(station_counts.items(), key=lambda x: x[1], reverse=True)
+	top_stations = sorted_stations[:10]  # Top 10
+	
+	# Fuentes más usadas
+	source_counts: Dict[str, int] = {}
+	for entry in history_entries:
+		source = entry.get('source') or 'desconocido'
+		source_counts[source] = source_counts.get(source, 0) + 1
+	
+	sorted_sources = sorted(source_counts.items(), key=lambda x: x[1], reverse=True)
+	
+	# Horas más activas
+	hour_counts: Dict[int, int] = {}
+	for entry in history_entries:
+		ts = entry.get('ts', 0)
+		if ts:
+			try:
+				dt = datetime.fromtimestamp(ts)
+				hour = dt.hour
+				hour_counts[hour] = hour_counts.get(hour, 0) + 1
+			except Exception:
+				pass
+	
+	# Días más activos (día de la semana)
+	day_counts: Dict[int, int] = {}
+	day_names = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
+	for entry in history_entries:
+		ts = entry.get('ts', 0)
+		if ts:
+			try:
+				dt = datetime.fromtimestamp(ts)
+				weekday = dt.weekday()
+				day_counts[weekday] = day_counts.get(weekday, 0) + 1
+			except Exception:
+				pass
+	
+	print()
+	print(c("Resumen general:", Colors.CYAN))
+	print(f"  {c('Total de reproducciones:', Colors.DIM)} {total_reproducciones}")
+	print(f"  {c('Emisoras únicas reproducidas:', Colors.DIM)} {len(station_counts)}")
+	print(f"  {c('Favoritos guardados:', Colors.DIM)} {total_favoritos}")
+	if total_duration > 0:
+		print(f"  {c('Tiempo total escuchado:', Colors.DIM)} {format_duration(total_duration)}")
+	
+	# Gráfico de horas más activas
+	if hour_counts:
+		print()
+		print(c("Horas más activas:", Colors.CYAN))
+		max_hour_count = max(hour_counts.values()) if hour_counts.values() else 1
+		for hour in range(24):
+			count = hour_counts.get(hour, 0)
+			bar = draw_ascii_bar(count, max_hour_count, 20)
+			hour_str = f"{hour:02d}:00"
+			print(f"  {c(hour_str, Colors.YELLOW)} {bar} {dim(f'({count})')}")
+	
+	# Gráfico de días más activos
+	if day_counts:
+		print()
+		print(c("Días de la semana más activos:", Colors.CYAN))
+		max_day_count = max(day_counts.values()) if day_counts.values() else 1
+		for day_idx in range(7):
+			count = day_counts.get(day_idx, 0)
+			bar = draw_ascii_bar(count, max_day_count, 20)
+			day_name = day_names[day_idx]
+			print(f"  {c(day_name, Colors.YELLOW)} {bar} {dim(f'({count})')}")
+	
+	if top_stations:
+		print()
+		print(c("Top 10 emisoras más reproducidas:", Colors.CYAN))
+		for i, (key, count) in enumerate(top_stations, 1):
+			# Buscar el nombre de la emisora
+			name = key
+			for entry in history_entries:
+				if (entry.get('url') or '') == key or (not key and entry.get('name')):
+					name = entry.get('name') or key or 'Unknown'
+					break
+			duration_info = ""
+			if key in station_durations and station_durations[key] > 0:
+				duration_info = f" [{format_duration(station_durations[key])}]"
+			print(f"  {c(str(i).rjust(2) + '.', Colors.YELLOW)} {name[:50]} {dim(f'({count}x)')}{duration_info}")
+	
+	if sorted_sources:
+		print()
+		print(c("Fuentes más escuchadas:", Colors.CYAN))
+		max_source_count = max(sorted_sources, key=lambda x: x[1])[1] if sorted_sources else 1
+		for source, count in sorted_sources[:5]:
+			bar = draw_ascii_bar(count, max_source_count, 15)
+			print(f"  {c(source, Colors.GREEN)} {bar} {dim(f'({count})')}")
+	
+	# Últimas reproducciones
+	if history_entries:
+		print()
+		print(c("Últimas 5 reproducciones:", Colors.CYAN))
+		for entry in history_entries[-5:][::-1]:  # Últimas 5, más reciente primero
+			name = entry.get('name') or entry.get('url') or 'Unknown'
+			source = entry.get('source') or ''
+			ts = entry.get('ts', 0)
+			duration = entry.get('duration', 0)
+			if ts:
+				try:
+					dt = datetime.fromtimestamp(ts)
+					time_str = dt.strftime('%Y-%m-%d %H:%M')
+				except Exception:
+					time_str = 'fecha desconocida'
+			else:
+				time_str = 'fecha desconocida'
+			badge = dim(f"[{source}]") if source else ''
+			duration_str = f" - {format_duration(duration)}" if isinstance(duration, (int, float)) and duration > 0 else ""
+			print(f"  {name[:45]} {badge} {dim(f'({time_str})')}{duration_str}")
+	
+	print()
+	input(c("Pulsa enter para volver... ", Colors.CYAN))
+
 
 # --- Menú de historial ---
 
@@ -1005,13 +1818,47 @@ def history_menu() -> None:
 		labels.append(f"{name} {badge}")
 	while True:
 		print()
-		header("Historial (recientes)")
-		print(f"  {c('e', Colors.GREEN)} Exportar historial  |  {c('i', Colors.GREEN)} Importar historial  |  {c('r', Colors.GREEN)} Aleatorio  |  {c('0', Colors.YELLOW)} Volver (q)")
+		header(f"Historial (recientes) ({len(entries)} entradas)")
+		print(f"  {c('1.', Colors.YELLOW)} {icon('LAST')}Reproducir último (l)  |  {c('2.', Colors.YELLOW)} {icon('EXPORT')}Exportar (e)  |  {c('3.', Colors.YELLOW)} {icon('IMPORT')}Importar (i)  |  {c('4.', Colors.YELLOW)} {icon('RANDOM')}Aleatorio (r)  |  {c('5.', Colors.YELLOW)} {icon('TRASH')}Limpiar (c)  |  {c('0.', Colors.YELLOW)} Volver (q)")
 		print(c(line(), Colors.BLUE))
-		cmd = input(c("Pulsa 'e'/'i'/'r' o enter para listar: ", Colors.CYAN)).strip().lower()
+		cmd = input(c("Selecciona: ", Colors.CYAN)).strip().lower()
 		if cmd in ('0', 'q'):
 			return
-		if cmd == 'e':
+		if cmd in ('1', 'l'):
+			# Reproducir último canal del historial
+			if entries:
+				last_entry = entries[-1]
+				name = last_entry.get('name') or last_entry.get('url') or ''
+				url = last_entry.get('url') or ''
+				if url:
+					print(f"{c('Reproduciendo último:', Colors.GREEN)} {name}")
+					try:
+						play_with_config(url)
+					except MpvNotFoundError as e:
+						print(str(e))
+					append_history(name, url, last_entry.get('source') or 'historial')
+				else:
+					print(c("No hay URL válida en la última entrada.", Colors.RED))
+			else:
+				print(c("No hay historial.", Colors.YELLOW))
+			input(c("Pulsa enter para volver... ", Colors.CYAN))
+			continue
+		if cmd in ('5', 'c'):
+			# Limpiar historial
+			if not entries:
+				print(c("El historial ya está vacío.", Colors.YELLOW))
+				input(c("Pulsa enter para volver... ", Colors.CYAN))
+				continue
+			print(c(f"El historial contiene {len(entries)} entradas.", Colors.CYAN))
+			result = prompt_yes_no("¿Limpiar todo el historial?", default_yes=False)
+			if result is True:
+				save_history([])
+				entries = []
+				labels = []
+				print(c("Historial limpiado.", Colors.GREEN))
+			input(c("Pulsa enter para volver... ", Colors.CYAN))
+			continue
+		if cmd in ('2', 'e'):
 			path = input(c("Ruta destino (ej. history_export.json): ", Colors.CYAN)).strip()
 			if not path:
 				print(c("Ruta inválida.", Colors.RED))
@@ -1023,7 +1870,7 @@ def history_menu() -> None:
 				except Exception as e:
 					print(c(f"Error exportando: {e}", Colors.RED))
 			continue
-		if cmd == 'i':
+		if cmd in ('3', 'i'):
 			src = input(c("Ruta origen (archivo JSON de historial): ", Colors.CYAN)).strip()
 			try:
 				with open(src, 'r', encoding='utf-8') as f:
@@ -1043,21 +1890,32 @@ def history_menu() -> None:
 			except Exception as e:
 				print(c(f"Error importando: {e}", Colors.RED))
 			continue
-		if cmd == 'r':
+		if cmd in ('4', 'r'):
+			attempts = 0
 			while True:
 				entry = random.choice(entries)
 				name = entry.get('name') or entry.get('url') or ''
 				print(f"{c('Reproduciendo (aleatorio historial):', Colors.GREEN)} {name}")
 				try:
-					play_with_config(entry.get('url') or '')
+					code = play_with_config(entry.get('url') or '')
 				except MpvNotFoundError as e:
 					print(str(e))
 					break
+				if code != 0:
+					attempts += 1
+					if attempts <= 3:
+						print(c("Fallo, probando otra entrada...", Colors.YELLOW))
+						continue
+					else:
+						print(c("Demasiados fallos, saliendo del aleatorio.", Colors.RED))
+						break
+				# Solo añadir al historial si la reproducción fue exitosa
 				append_history(name, entry.get('url') or '', entry.get('source') or 'historial')
-				if not prompt_yes_no("¿Reproducir otro historial aleatorio?", default_yes=True):
+				result = prompt_yes_no("¿Reproducir otro historial aleatorio?", default_yes=True)
+				if result is None or not result:
 					break
 			continue
-		idx = paginated_select(labels, "Historial (recientes)")
+		idx = paginated_select(labels, "Historial (recientes)", show_count=False)
 		if idx in (0, -1):
 			return
 		if idx == -2 or idx == -3:
@@ -1104,10 +1962,12 @@ def main() -> int:
 		print(f"  {c('5.', Colors.YELLOW)} Favoritos")
 		print(f"  {c('6.', Colors.YELLOW)} Historial")
 		print(f"  {c('7.', Colors.YELLOW)} Configuración (c)")
-		print(f"  {c('8.', Colors.YELLOW)} Salir (q)")
+		print(f"  {c('8.', Colors.YELLOW)} Reproducir último canal (u/l)")
+		print(f"  {c('9.', Colors.YELLOW)} Estadísticas (s)")
+		print(f"  {c('0.', Colors.YELLOW)} Salir (q)")
 		print(c(line(), Colors.BLUE))
 		opt = input(c("Selecciona: ", Colors.CYAN)).strip().lower()
-		if opt in ('8', 'q'):
+		if opt in ('0', 'q'):
 			return 0
 		elif opt in ('3', 'r'):
 			random_channel_from_all(pls)
@@ -1124,8 +1984,33 @@ def main() -> int:
 		elif opt == '5':
 			favorites_menu()
 			continue
-		elif opt == '7':
+		elif opt in ('7', 'c'):
 			config_menu()
+			continue
+		elif opt in ('8', 'u', 'l'):
+			# Reproducir último canal
+			entries = load_history()
+			if entries:
+				last_entry = entries[-1]
+				name = last_entry.get('name') or last_entry.get('url') or ''
+				url = last_entry.get('url') or ''
+				if url:
+					print(f"{c('Reproduciendo último canal:', Colors.GREEN)} {name}")
+					try:
+						play_with_config(url)
+					except MpvNotFoundError as e:
+						print(str(e))
+					append_history(name, url, last_entry.get('source') or 'historial')
+				else:
+					print(c("No hay URL válida en la última entrada.", Colors.RED))
+					input(c("Pulsa enter para continuar... ", Colors.CYAN))
+			else:
+				print(c("No hay historial.", Colors.YELLOW))
+				input(c("Pulsa enter para continuar... ", Colors.CYAN))
+			continue
+		elif opt in ('9', 's'):
+			# Estadísticas
+			stats_menu()
 			continue
 		elif opt == '1':
 			pls = list_playlists()
@@ -1133,7 +2018,8 @@ def main() -> int:
 			pl_filter = ''
 			while True:
 				filtered_pls = [p for p in pls if pl_filter in p.lower()] if pl_filter else pls
-				idx = paginated_select(filtered_pls, "Playlists detectadas")
+				title_with_count = f"Playlists detectadas ({len(filtered_pls)})"
+				idx = paginated_select(filtered_pls, title_with_count)
 				if idx == -2:
 					SORT_PLAYLISTS_ASC = not SORT_PLAYLISTS_ASC
 					CONFIG['sort_playlists'] = 'asc' if SORT_PLAYLISTS_ASC else 'desc'
@@ -1147,9 +2033,15 @@ def main() -> int:
 			if idx == 0:
 				continue
 			path = os.path.join(PLAYLISTS_DIR, filtered_pls[idx - 1])
+			icon_pl = icon('PLAYLIST')
+			print(c(f"{icon_pl}Cargando playlist...", Colors.CYAN), end='', flush=True)
 			try:
 				channels = parse_m3u_file(path)
+				check_icon = Icons.get_icon('CHECK')
+				print(c(f" {check_icon} ({len(channels)} emisoras)", Colors.GREEN))
 			except Exception as e:
+				cross_icon = Icons.get_icon('CROSS')
+				print(c(f" {cross_icon}", Colors.RED))
 				print(f"{c('Error leyendo la playlist:', Colors.RED)} {e}")
 				continue
 			if not channels:
@@ -1157,7 +2049,9 @@ def main() -> int:
 				continue
 			while True:
 				print()
-				header(f"Playlist: {filtered_pls[idx - 1]}")
+				pl_name = filtered_pls[idx - 1]
+				pl_count = len(channels)
+				header(f"Playlist: {pl_name} ({pl_count} emisoras)")
 				print(f"  {c('1.', Colors.YELLOW)} Elegir canal")
 				print(f"  {c('2.', Colors.YELLOW)} Reproducir canal aleatorio de esta playlist (r)")
 				print(f"  {c('0.', Colors.YELLOW)} Volver (q)")
@@ -1167,19 +2061,29 @@ def main() -> int:
 					break
 				elif sub in ('2', 'r'):
 					channels_sorted = sorted(channels, key=lambda ch: (ch.get('name') or ch.get('url') or '').lower(), reverse=not SORT_CHANNELS_ASC)
+					attempts = 0
 					while True:
 						channel = random.choice(channels_sorted)
 						name = channel.get('name') or channel.get('url')
 						print(f"{c('Reproduciendo (aleatorio en playlist):', Colors.GREEN)} {name}")
 						try:
-							play_with_config(channel.get('url'))
+							code = play_with_config(channel.get('url'))
 						except MpvNotFoundError as e:
 							print(str(e))
 							break
+						if code != 0:
+							attempts += 1
+							if attempts <= 3:
+								print(c("Fallo, probando otro canal...", Colors.YELLOW))
+								continue
+							else:
+								print(c("Demasiados fallos, saliendo del aleatorio.", Colors.RED))
+								break
+						# Solo añadir al historial y ofrecer favoritos si la reproducción fue exitosa
 						append_history(name, channel.get('url'), filtered_pls[idx - 1])
-						# Ofrecer favoritos también aquí
 						offer_add_favorite(name, channel.get('url'), filtered_pls[idx - 1])
-						if not prompt_yes_no("¿Reproducir otra emisora aleatoria de esta playlist?", default_yes=True):
+						result = prompt_yes_no("¿Reproducir otra emisora aleatoria de esta playlist?", default_yes=True)
+						if result is None or not result:
 							break
 					continue
 				elif sub == '1':
