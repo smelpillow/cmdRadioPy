@@ -1,6 +1,16 @@
 # cmdRadioPy
 
-Reproductor de listas M3U para terminal usando mpv.
+```
+                       ______            ___       ______  __   
+  _________ ___  ____/ / __ \____ _____/ (_)___  / __ \ \/ /   
+ / ___/ __ `__ \/ __  / /_/ / __ `/ __  / / __ \/ /_/ /\  /    
+/ /__/ / / / / / /_/ / _, _/ /_/ / /_/ / / /_/ / ____/ / /     
+\___/_/ /_/ /_/\__,_/_/ |_|\__,_/\__,_/_/\____/_/     /_/      
+```
+
+Reproductor de radio online, principalmente se nutre de datos de listas .M3U, pero permite busqueda online, reproducción aleatoria y continua, gestión de favoritos, historial de ultimas escuchas y una estadística de uso.
+
+Escucha radio internacionales o temáticas, todo ello desde tu terminal, consumiendo menos de 15 Megas de memoria RAM.
 
 ## Requisitos
 
