@@ -1,0 +1,88 @@
+# Bytecode compilado de Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribuciones / empaquetado
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Entornos virtuales
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDEs y editores
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# Archivos del sistema operativo
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Archivos de configuración del usuario (ya están en USER_DATA_DIR)
+# Estos no deberían estar en el proyecto de todas formas
+config.json
+favorites.json
+history.json
+
+# Archivos temporales y logs
+*.log
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# Archivos de pruebas
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# Archivos de mpv portátil (si alguien incluye mpv local)
+mpv/
+mpv.exe
+
+# Archivos de exportación/importación (si se guardan en el proyecto)
+*.export.json
+*.backup.json
+

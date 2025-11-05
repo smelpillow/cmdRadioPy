@@ -67,12 +67,16 @@ USER_DATA_DIR = get_user_data_dir()
 FAVORITES_FILE = os.path.join(USER_DATA_DIR, 'favorites.json')
 HISTORY_FILE = os.path.join(USER_DATA_DIR, 'history.json')
 CONFIG_FILE = os.path.join(USER_DATA_DIR, 'config.json')
+SEARCH_HISTORY_FILE = os.path.join(USER_DATA_DIR, 'search_history.json')
 
 # Estado de configuración (editable en tiempo de ejecución)
 CURRENT_PAGE_SIZE = 20
 SORT_PLAYLISTS_ASC = True
 SORT_CHANNELS_ASC = True
 CONFIG: Dict[str, Optional[str]] = {}
+
+# Longitud mínima para búsquedas (por defecto 3 caracteres)
+MIN_SEARCH_LENGTH = 3
 
 
 # --- Colores y estilos ---
@@ -338,14 +342,59 @@ def filter_not_blacklisted(items: List[Dict]) -> List[Dict]:
 def online_search_radio_browser() -> None:
 	from urllib.parse import quote
 	header("Búsqueda online (Radio Browser)")
-	query = input(c("Texto a buscar (nombre de emisora): ", Colors.CYAN)).strip()
-	country = input(c("Filtrar país (código o nombre, opcional): ", Colors.CYAN)).strip()
-	language = input(c("Filtrar idioma (opcional): ", Colors.CYAN)).strip()
-	bitrate = input(c("Bitrate mínimo (kbps, opcional): ", Colors.CYAN)).strip()
+	
+	# Cargar historial de búsquedas y sugerencias
+	search_history = load_search_history()
+	favorites = load_favorites()
+	play_history = load_history()
+	
+	# Mostrar búsquedas recientes si existen
+	if search_history:
+		print(c("Búsquedas recientes:", Colors.CYAN))
+		for i, h in enumerate(search_history[:5], 1):
+			print(f"  {c(str(i), Colors.YELLOW)}. {h}")
+		print()
+	
+	# Obtener sugerencias
+	suggestions = get_search_suggestions("", search_history, favorites, play_history)
+	query = prompt_with_suggestions("Texto a buscar (nombre de emisora) o número de sugerencia: ", suggestions, search_history)
+	
 	if not query:
 		print(c("Búsqueda vacía.", Colors.YELLOW))
 		input(c("Pulsa enter para volver... ", Colors.CYAN))
 		return
+	
+	# Validar longitud mínima de búsqueda
+	min_length = CONFIG.get('min_search_length', MIN_SEARCH_LENGTH)
+	try:
+		min_length = int(min_length)
+	except Exception:
+		min_length = MIN_SEARCH_LENGTH
+	
+	if len(query) < min_length:
+		print(c(f"⚠ Búsqueda muy corta ({len(query)} caracteres).", Colors.YELLOW))
+		print(c(f"Se recomienda al menos {min_length} caracteres para evitar resultados excesivos.", Colors.YELLOW))
+		if len(query) == 1:
+			# Si es una sola letra, no permitir directamente
+			result = prompt_yes_no(f"¿Realmente quieres buscar con solo '{query}'? (puede tardar mucho y generar miles de resultados)", default_yes=False)
+			if result is None or not result:
+				input(c("Pulsa enter para volver... ", Colors.CYAN))
+				return
+		elif len(query) == 2:
+			# Si son 2 letras, advertir
+			result = prompt_yes_no(f"¿Continuar con la búsqueda '{query}'? (puede generar muchos resultados)", default_yes=False)
+			if result is None or not result:
+				input(c("Pulsa enter para volver... ", Colors.CYAN))
+				return
+	
+	# Añadir a historial de búsquedas
+	add_to_search_history(query)
+	
+	country = input(c("Filtrar país (código o nombre, opcional): ", Colors.CYAN)).strip()
+	language = input(c("Filtrar idioma (opcional): ", Colors.CYAN)).strip()
+	bitrate = input(c("Bitrate mínimo (kbps, opcional): ", Colors.CYAN)).strip()
+	
+	print(c(f"Buscando '{query}' online...", Colors.CYAN))
 	endpoints = [
 		"https://fi1.api.radio-browser.info/json/stations/search?name=$searchTerm",
 		"https://de2.api.radio-browser.info/json/stations/search?name=$searchTerm",
@@ -512,6 +561,46 @@ def play_with_config(url: str) -> int:
 		time.sleep(max(0, delay))
 
 
+def cleanup_history_auto() -> None:
+	"""
+	Limpia el historial automáticamente según la configuración.
+	Puede limpiar por días o por número máximo de entradas.
+	Esta función asume que el historial ya está guardado en el archivo.
+	"""
+	hist = load_history()
+	if not hist:
+		return
+	
+	# Verificar configuración de limpieza
+	cleanup_mode = CONFIG.get('history_cleanup_mode', 'none')  # 'none', 'days', 'count'
+	
+	if cleanup_mode == 'days':
+		# Limpiar por días
+		days = CONFIG.get('history_cleanup_days', 30)
+		try:
+			days = int(days)
+		except Exception:
+			days = 30
+		
+		if days > 0:
+			cutoff_time = int(time.time()) - (days * 24 * 60 * 60)
+			hist = [h for h in hist if h.get('ts', 0) >= cutoff_time]
+	
+	elif cleanup_mode == 'count':
+		# Limpiar por número máximo de entradas
+		max_entries = CONFIG.get('history_cleanup_max_entries', 200)
+		try:
+			max_entries = int(max_entries)
+		except Exception:
+			max_entries = 200
+		
+		if max_entries > 0 and len(hist) > max_entries:
+			hist = hist[-max_entries:]
+	
+	# Guardar historial limpiado
+	save_history(hist)
+
+
 def append_history(name: str, url: str, source: Optional[str], duration: Optional[float] = None, attrs: Optional[Dict] = None) -> None:
 	entry = {
 		'name': name or url,
@@ -533,9 +622,24 @@ def append_history(name: str, url: str, source: Optional[str], duration: Optiona
 		except Exception:
 			pass
 	hist.append(entry)
-	# Limitar a últimos 200
-	if len(hist) > 200:
-		hist = hist[-200:]
+	
+	# Limpiar automáticamente antes de guardar (solo si está configurado)
+	cleanup_mode = CONFIG.get('history_cleanup_mode', 'none')
+	if cleanup_mode != 'none':
+		# Guardar primero con la nueva entrada
+		try:
+			with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
+				json.dump(hist, f, ensure_ascii=False, indent=2)
+		except Exception:
+			pass
+		# Luego limpiar
+		cleanup_history_auto()
+		return  # Ya se guardó en cleanup_history_auto
+	
+	# Si no hay limpieza automática, limitar a últimos 500 como máximo (fallback)
+	if len(hist) > 500:
+		hist = hist[-500:]
+	
 	try:
 		with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
 			json.dump(hist, f, ensure_ascii=False, indent=2)
@@ -805,6 +909,125 @@ def filter_channels(channels: List[Dict]) -> List[Dict]:
 	if not query:
 		return channels
 	return [c_ for c_ in channels if query in (c_.get('name') or '').lower()]
+
+
+def load_search_history() -> List[str]:
+	"""Carga el historial de búsquedas recientes."""
+	if not os.path.isfile(SEARCH_HISTORY_FILE):
+		return []
+	try:
+		with open(SEARCH_HISTORY_FILE, 'r', encoding='utf-8') as f:
+			data = json.load(f)
+			if isinstance(data, list):
+				return [str(s) for s in data if s]
+	except Exception:
+		pass
+	return []
+
+
+def save_search_history(queries: List[str]) -> None:
+	"""Guarda el historial de búsquedas (máximo 20)."""
+	try:
+		# Mantener solo las últimas 20 búsquedas únicas
+		unique_queries = []
+		seen = set()
+		for q in reversed(queries):
+			q_lower = q.lower().strip()
+			if q_lower and q_lower not in seen:
+				unique_queries.insert(0, q.strip())
+				seen.add(q_lower)
+				if len(unique_queries) >= 20:
+					break
+		
+		with open(SEARCH_HISTORY_FILE, 'w', encoding='utf-8') as f:
+			json.dump(unique_queries, f, ensure_ascii=False, indent=2)
+	except Exception:
+		pass
+
+
+def add_to_search_history(query: str) -> None:
+	"""Añade una búsqueda al historial."""
+	if not query or not query.strip():
+		return
+	history = load_search_history()
+	# Añadir al final (se moverá al principio si está duplicada)
+	history.append(query.strip())
+	save_search_history(history)
+
+
+def get_search_suggestions(query: str, history: List[str], favorites: List[Dict], play_history: List[Dict]) -> List[str]:
+	"""
+	Genera sugerencias de búsqueda basadas en:
+	- Búsquedas recientes similares
+	- Nombres de canales en favoritos
+	- Nombres de canales en historial de reproducción
+	"""
+	suggestions = []
+	query_lower = query.lower().strip()
+	
+	if not query_lower:
+		# Si la búsqueda está vacía, mostrar búsquedas recientes
+		return history[:5]
+	
+	# Buscar en historial de búsquedas
+	for h in history:
+		if query_lower in h.lower() and h.lower() != query_lower:
+			suggestions.append(h)
+	
+	# Buscar en favoritos
+	for fav in favorites:
+		name = fav.get('name', '')
+		if name and query_lower in name.lower() and name not in suggestions:
+			suggestions.append(name)
+	
+	# Buscar en historial de reproducción
+	for entry in play_history:
+		name = entry.get('name', '')
+		if name and query_lower in name.lower() and name not in suggestions:
+			suggestions.append(name)
+	
+	# Limitar a 5 sugerencias
+	return suggestions[:5]
+
+
+def prompt_with_suggestions(prompt_text: str, suggestions: List[str], history: List[str]) -> Optional[str]:
+	"""
+	Muestra un prompt con sugerencias y permite seleccionar una.
+	"""
+	if suggestions:
+		print()
+		print(c("Sugerencias:", Colors.CYAN))
+		for i, sug in enumerate(suggestions, 1):
+			print(f"  {c(str(i), Colors.YELLOW)}. {sug}")
+		if history and len(suggestions) < 5:
+			print(f"  {c('h', Colors.YELLOW)}. Ver historial de búsquedas")
+		print()
+	
+	user_input = input(c(prompt_text, Colors.CYAN)).strip()
+	
+	if not user_input:
+		return None
+	
+	# Si el usuario presiona un número, seleccionar sugerencia
+	if user_input.isdigit():
+		idx = int(user_input)
+		if 1 <= idx <= len(suggestions):
+			return suggestions[idx - 1]
+	
+	# Si presiona 'h', mostrar historial completo
+	if user_input.lower() == 'h' and history:
+		print()
+		print(c("Historial de búsquedas:", Colors.CYAN))
+		for i, h in enumerate(history[:10], 1):
+			print(f"  {c(str(i), Colors.YELLOW)}. {h}")
+		print()
+		hist_choice = input(c("Selecciona una búsqueda (número) o pulsa enter para continuar: ", Colors.CYAN)).strip()
+		if hist_choice.isdigit():
+			hist_idx = int(hist_choice)
+			if 1 <= hist_idx <= min(10, len(history)):
+				return history[hist_idx - 1]
+	
+	return user_input
 
 
 def load_favorites() -> List[Dict[str, str]]:
@@ -1085,11 +1308,56 @@ def favorites_menu() -> None:
 
 def global_search(playlists: List[str]) -> None:
 	header("Búsqueda global en playlists")
-	query = input(c("Texto a buscar (en nombre/url): ", Colors.CYAN)).strip().lower()
+	
+	# Cargar historial de búsquedas y sugerencias
+	search_history = load_search_history()
+	favorites = load_favorites()
+	play_history = load_history()
+	
+	# Mostrar búsquedas recientes si existen
+	if search_history:
+		print(c("Búsquedas recientes:", Colors.CYAN))
+		for i, h in enumerate(search_history[:5], 1):
+			print(f"  {c(str(i), Colors.YELLOW)}. {h}")
+		print()
+	
+	# Obtener sugerencias basadas en búsqueda vacía (mostrará recientes)
+	suggestions = get_search_suggestions("", search_history, favorites, play_history)
+	query = prompt_with_suggestions("Texto a buscar (en nombre/url) o número de sugerencia: ", suggestions, search_history)
+	
 	if not query:
 		print(c("Búsqueda vacía.", Colors.YELLOW))
 		input(c("Pulsa enter para volver... ", Colors.CYAN))
 		return
+	
+	# Validar longitud mínima de búsqueda
+	min_length = CONFIG.get('min_search_length', MIN_SEARCH_LENGTH)
+	try:
+		min_length = int(min_length)
+	except Exception:
+		min_length = MIN_SEARCH_LENGTH
+	
+	if len(query) < min_length:
+		print(c(f"⚠ Búsqueda muy corta ({len(query)} caracteres).", Colors.YELLOW))
+		print(c(f"Se recomienda al menos {min_length} caracteres para evitar resultados excesivos.", Colors.YELLOW))
+		if len(query) == 1:
+			# Si es una sola letra, no permitir directamente
+			result = prompt_yes_no(f"¿Realmente quieres buscar con solo '{query}'? (puede tardar mucho)", default_yes=False)
+			if result is None or not result:
+				input(c("Pulsa enter para volver... ", Colors.CYAN))
+				return
+		elif len(query) == 2:
+			# Si son 2 letras, advertir
+			result = prompt_yes_no(f"¿Continuar con la búsqueda '{query}'? (puede generar muchos resultados)", default_yes=False)
+			if result is None or not result:
+				input(c("Pulsa enter para volver... ", Colors.CYAN))
+				return
+	
+	# Añadir a historial de búsquedas
+	add_to_search_history(query)
+	
+	query = query.lower()
+	print(c(f"Buscando '{query}'...", Colors.CYAN))
 	results: List[Dict] = []
 	for pl in playlists:
 		path = os.path.join(PLAYLISTS_DIR, pl)
@@ -1518,8 +1786,19 @@ def config_menu() -> None:
 		if validate_enabled:
 			print(f"     Timeout de validación: {timeout_val}s")
 		print(f"  {c('11.', Colors.YELLOW)} {icon('MUSIC')}Iconos en interfaz: {icons_status} (i)")
-		print(f"  {c('12.', Colors.YELLOW)} {icon('EXPORT')}Exportar configuración completa (e)")
-		print(f"  {c('13.', Colors.YELLOW)} {icon('IMPORT')}Importar configuración completa (x)")
+		min_search_len = CONFIG.get('min_search_length', MIN_SEARCH_LENGTH)
+		print(f"  {c('12.', Colors.YELLOW)} {icon('FILTER')}Longitud mínima de búsqueda: {min_search_len} caracteres")
+		cleanup_mode = CONFIG.get('history_cleanup_mode', 'none')
+		cleanup_status = 'desactivada'
+		if cleanup_mode == 'days':
+			days = CONFIG.get('history_cleanup_days', 30)
+			cleanup_status = f"por días ({days} días)"
+		elif cleanup_mode == 'count':
+			max_entries = CONFIG.get('history_cleanup_max_entries', 200)
+			cleanup_status = f"por cantidad ({max_entries} entradas)"
+		print(f"  {c('13.', Colors.YELLOW)} {icon('HISTORY')}Limpieza automática del historial: {cleanup_status} (h)")
+		print(f"  {c('14.', Colors.YELLOW)} {icon('EXPORT')}Exportar configuración completa (e)")
+		print(f"  {c('15.', Colors.YELLOW)} {icon('IMPORT')}Importar configuración completa (x)")
 		print(f"  {c('0.', Colors.YELLOW)} Volver (q)")
 		print(c(line(), Colors.BLUE))
 		opt = input(c("Selecciona: ", Colors.CYAN)).strip().lower()
@@ -1620,10 +1899,72 @@ def config_menu() -> None:
 			save_config()
 			status = 'activados' if CONFIG['show_icons'] else 'desactivados'
 			print(c(f"Iconos {status}.", Colors.GREEN))
-		elif opt in ('12', 'e'):
+		elif opt == '12':
+			# Configurar longitud mínima de búsqueda
+			current_min = CONFIG.get('min_search_length', MIN_SEARCH_LENGTH)
+			print(c(f"Longitud mínima actual: {current_min} caracteres", Colors.CYAN))
+			print(c("Recomendado: 3 caracteres (evita búsquedas muy amplias)", Colors.DIM))
+			val = input(c("Nueva longitud mínima (1-10): ", Colors.CYAN)).strip()
+			if val.isdigit():
+				n = int(val)
+				if 1 <= n <= 10:
+					CONFIG['min_search_length'] = n
+					save_config()
+					print(c(f"Longitud mínima de búsqueda actualizada a {n} caracteres.", Colors.GREEN))
+				else:
+					print(c("Valor fuera de rango (1-10).", Colors.RED))
+			else:
+				print(c("Entrada no válida.", Colors.RED))
+		elif opt in ('13', 'h'):
+			# Configurar limpieza automática del historial
+			print()
+			print(c("Modos de limpieza:", Colors.CYAN))
+			print(f"  {c('1.', Colors.YELLOW)} Desactivada")
+			print(f"  {c('2.', Colors.YELLOW)} Por días (mantener últimos N días)")
+			print(f"  {c('3.', Colors.YELLOW)} Por cantidad (mantener últimas N entradas)")
+			choice = input(c("Selecciona modo: ", Colors.CYAN)).strip()
+			if choice == '1':
+				CONFIG['history_cleanup_mode'] = 'none'
+				save_config()
+				print(c("Limpieza automática desactivada.", Colors.GREEN))
+			elif choice == '2':
+				days_str = input(c("Días a mantener (ej. 30): ", Colors.CYAN)).strip()
+				if days_str.isdigit():
+					days = int(days_str)
+					if days > 0:
+						CONFIG['history_cleanup_mode'] = 'days'
+						CONFIG['history_cleanup_days'] = days
+						save_config()
+						print(c(f"Limpieza automática configurada: mantener últimos {days} días.", Colors.GREEN))
+						# Limpiar ahora
+						cleanup_history_auto()
+						print(c("Historial limpiado.", Colors.GREEN))
+					else:
+						print(c("Debe ser un número mayor que 0.", Colors.RED))
+				else:
+					print(c("Entrada no válida.", Colors.RED))
+			elif choice == '3':
+				count_str = input(c("Número máximo de entradas (ej. 200): ", Colors.CYAN)).strip()
+				if count_str.isdigit():
+					count = int(count_str)
+					if count > 0:
+						CONFIG['history_cleanup_mode'] = 'count'
+						CONFIG['history_cleanup_max_entries'] = count
+						save_config()
+						print(c(f"Limpieza automática configurada: mantener últimas {count} entradas.", Colors.GREEN))
+						# Limpiar ahora
+						cleanup_history_auto()
+						print(c("Historial limpiado.", Colors.GREEN))
+					else:
+						print(c("Debe ser un número mayor que 0.", Colors.RED))
+				else:
+					print(c("Entrada no válida.", Colors.RED))
+			else:
+				print(c("Opción no válida.", Colors.RED))
+		elif opt in ('14', 'e'):
 			export_config_complete()
 			CONFIG = load_config()  # Recargar configuración por si cambió
-		elif opt in ('13', 'x'):
+		elif opt in ('15', 'x'):
 			import_config_complete()
 			CONFIG = load_config()  # Recargar configuración después de importar
 		else:
