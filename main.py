@@ -314,6 +314,76 @@ def http_get_json(url: str, timeout: int = 8):
 		return None
 
 
+def http_download_file(url: str, dest_path: str, timeout: int = 30):
+	"""Descarga un archivo desde una URL y lo guarda en dest_path.
+	
+	Returns:
+		Tupla (success, error_message) donde success es True si la descarga fue exitosa,
+		y error_message contiene el mensaje de error si falló, o None si fue exitosa.
+	"""
+	import urllib.request
+	import urllib.error
+	opener = build_opener_from_config()
+	try:
+		with opener.open(url, timeout=timeout) as resp:
+			# Verificar código de estado HTTP
+			if hasattr(resp, 'status'):
+				if resp.status != 200:
+					return False, f"HTTP {resp.status}: {resp.reason}"
+			data = resp.read()
+			# Asegurar que el directorio destino existe
+			dest_dir = os.path.dirname(dest_path)
+			if dest_dir:
+				os.makedirs(dest_dir, exist_ok=True)
+			with open(dest_path, 'wb') as f:
+				f.write(data)
+			return True, None
+	except urllib.error.HTTPError as e:
+		return False, f"HTTP {e.code}: {e.reason}"
+	except urllib.error.URLError as e:
+		return False, f"Error de URL: {str(e)}"
+	except TimeoutError:
+		return False, "Timeout: La descarga tardó demasiado"
+	except OSError as e:
+		return False, f"Error de sistema: {str(e)}"
+	except Exception as e:
+		return False, f"Error inesperado: {str(e)}"
+
+
+def http_fetch_content(url: str, timeout: int = 30):
+	"""Descarga el contenido de una URL y lo retorna como string.
+	
+	Returns:
+		Tupla (content, error_message) donde content es el contenido si fue exitoso,
+		y error_message contiene el mensaje de error si falló, o None si fue exitoso.
+	"""
+	import urllib.request
+	import urllib.error
+	opener = build_opener_from_config()
+	try:
+		with opener.open(url, timeout=timeout) as resp:
+			# Verificar código de estado HTTP
+			if hasattr(resp, 'status'):
+				if resp.status != 200:
+					return None, f"HTTP {resp.status}: {resp.reason}"
+			data = resp.read()
+			# Intentar decodificar como UTF-8
+			try:
+				content = data.decode('utf-8')
+			except UnicodeDecodeError:
+				# Si falla, intentar con latin-1 o ignorar errores
+				content = data.decode('utf-8', errors='ignore')
+			return content, None
+	except urllib.error.HTTPError as e:
+		return None, f"HTTP {e.code}: {e.reason}"
+	except urllib.error.URLError as e:
+		return None, f"Error de URL: {str(e)}"
+	except TimeoutError:
+		return None, "Timeout: La descarga tardó demasiado"
+	except Exception as e:
+		return None, f"Error inesperado: {str(e)}"
+
+
 # --- Utilidades de blacklist ---
 
 def get_blacklist() -> List[str]:
@@ -1558,7 +1628,7 @@ def select_and_play(channels: List[Dict], source: Optional[str] = None) -> None:
 			duration = time.time() - start_time
 			attrs = channel.get('attrs', {})
 			append_history(name, url, source, duration=duration, attrs=attrs)
-			offer_add_favorite(name, url, source)
+		offer_add_favorite(name, url, source)
 
 
 def random_channel_from_all(playlists: List[str]) -> None:
@@ -2270,6 +2340,504 @@ def history_menu() -> None:
 		append_history(entry.get('name') or '', entry.get('url') or '', entry.get('source') or '')
 
 
+# --- Descarga de listas desde GitHub ---
+
+GITHUB_REPO_BASE = "https://raw.githubusercontent.com/junguler/m3u-radio-music-playlists/main"
+
+# Categorías populares disponibles en el repositorio (archivos en la raíz)
+POPULAR_CATEGORIES = [
+	("rock", "Rock"),
+	("pop", "Pop"),
+	("electronic", "Electronic"),
+	("hip_hop", "Hip Hop"),
+	("jazz", "Jazz"),
+	("classical", "Classical"),
+	("country", "Country"),
+	("reggae", "Reggae"),
+	("metal", "Metal"),
+	("dance", "Dance"),
+	("techno", "Techno"),
+	("house", "House"),
+	("trance", "Trance"),
+	("latin", "Latin"),
+	("funk", "Funk"),
+	("blues", "Blues"),
+	("alternative", "Alternative"),
+	("indie", "Indie"),
+	("hardrock", "Hard Rock"),
+	("acid_jazz", "Acid Jazz"),
+	("smooth_jazz", "Smooth Jazz"),
+	("eurodance", "Eurodance"),
+	("jpop", "J-Pop"),
+]
+
+# Estilos más populares (selección recomendada)
+MOST_POPULAR_GENRES = [
+	"rock", "pop", "electronic", "hip_hop", "jazz", "metal", 
+	"dance", "techno", "house", "trance", "latin", "alternative"
+]
+
+
+def download_playlist_from_github(category: str, filename: str, display_name: str) -> bool:
+	"""Descarga una playlist desde el repositorio de GitHub.
+	
+	Args:
+		category: Categoría/carpeta en el repo (ej: "rock", "" para raíz)
+		filename: Nombre del archivo M3U
+		display_name: Nombre para mostrar al usuario
+		
+	Returns:
+		True si la descarga fue exitosa, False en caso contrario.
+	"""
+	# Construir URL
+	if category:
+		url = f"{GITHUB_REPO_BASE}/{category}/{filename}"
+	else:
+		url = f"{GITHUB_REPO_BASE}/{filename}"
+	
+	# Nombre del archivo local (usar el nombre original o uno más limpio)
+	local_filename = filename
+	if not local_filename.lower().endswith(('.m3u', '.m3u8')):
+		local_filename += '.m3u'
+	
+	dest_path = os.path.join(PLAYLISTS_DIR, local_filename)
+	
+	# Verificar si ya existe
+	if os.path.exists(dest_path):
+		result = prompt_yes_no(f"El archivo '{local_filename}' ya existe. ¿Sobrescribir?", default_yes=False)
+		if result is None or not result:
+			return False
+	
+	print(c(f"Descargando {display_name}...", Colors.CYAN), end='', flush=True)
+	
+	success, error_msg = http_download_file(url, dest_path, timeout=60)
+	if success:
+		# Verificar que el archivo se descargó correctamente
+		try:
+			channels = parse_m3u_file(dest_path)
+			check_icon = Icons.get_icon('CHECK')
+			print(c(f" {check_icon} ({len(channels)} emisoras)", Colors.GREEN))
+			return True
+		except Exception as e:
+			cross_icon = Icons.get_icon('CROSS')
+			print(c(f" {cross_icon}", Colors.RED))
+			print(c(f"Error: El archivo descargado no es válido: {e}", Colors.RED))
+			# Intentar eliminar el archivo corrupto
+			try:
+				os.remove(dest_path)
+			except Exception:
+				pass
+			return False
+	else:
+		cross_icon = Icons.get_icon('CROSS')
+		print(c(f" {cross_icon}", Colors.RED))
+		if error_msg:
+			print(c(f"Error: {error_msg}", Colors.RED))
+		else:
+			print(c(f"Error: No se pudo descargar el archivo desde {url}", Colors.RED))
+		return False
+
+
+def multi_select_categories() -> List[tuple]:
+	"""Permite seleccionar múltiples categorías con checkboxes.
+	
+	Returns:
+		Lista de tuplas (category_key, category_name) seleccionadas.
+	"""
+	selected = set()
+	categories_dict = {cat[0]: cat for cat in POPULAR_CATEGORIES}
+	
+	while True:
+		header("Seleccionar categorías (múltiple)")
+		print()
+		print(c("Instrucciones:", Colors.CYAN))
+		print("  - Escribe el número para seleccionar/deseleccionar")
+		print("  - 'a' para seleccionar estilos más populares")
+		print("  - 'd' para descargar las seleccionadas")
+		print("  - 'q' para cancelar")
+		print()
+		
+		# Mostrar categorías con checkboxes
+		for i, (key, name) in enumerate(POPULAR_CATEGORIES, 1):
+			marker = "✓" if key in selected else " "
+			marker_color = Colors.GREEN if key in selected else Colors.WHITE
+			is_popular = "⭐" if key in MOST_POPULAR_GENRES else " "
+			print(f"  {c(f'[{marker}]', marker_color)} {c(str(i), Colors.YELLOW)}. {is_popular} {name} ({key})")
+		
+		print()
+		print(f"  {c('a.', Colors.GREEN)} Seleccionar estilos más populares ({len(MOST_POPULAR_GENRES)} estilos)")
+		print(f"  {c('d.', Colors.GREEN)} Descargar seleccionadas ({len(selected)} categorías)")
+		print(f"  {c('0.', Colors.YELLOW)} Cancelar (q)")
+		print(c(line(), Colors.BLUE))
+		
+		choice = input(c("Selecciona: ", Colors.CYAN)).strip().lower()
+		
+		if choice in ('0', 'q'):
+			return []
+		elif choice == 'a':
+			# Seleccionar estilos más populares
+			selected.update(MOST_POPULAR_GENRES)
+			print(c(f"✓ Seleccionados {len(MOST_POPULAR_GENRES)} estilos más populares", Colors.GREEN))
+			input(c("Pulsa enter para continuar... ", Colors.CYAN))
+		elif choice == 'd':
+			if not selected:
+				print(c("No hay categorías seleccionadas.", Colors.YELLOW))
+				input(c("Pulsa enter para continuar... ", Colors.CYAN))
+				continue
+			# Confirmar descarga
+			selected_list = [categories_dict[key] for key in selected if key in categories_dict]
+			names = [cat[1] for cat in selected_list]
+			print()
+			print(c(f"Se descargarán {len(selected_list)} categorías:", Colors.CYAN))
+			for name in names:
+				print(f"  - {name}")
+			print()
+			result = prompt_yes_no("¿Continuar con la descarga?", default_yes=True)
+			if result is None or not result:
+				continue
+			return selected_list
+		elif choice.isdigit():
+			num = int(choice)
+			if 1 <= num <= len(POPULAR_CATEGORIES):
+				key = POPULAR_CATEGORIES[num - 1][0]
+				if key in selected:
+					selected.remove(key)
+				else:
+					selected.add(key)
+			else:
+				print(c("Número inválido.", Colors.RED))
+				input(c("Pulsa enter para continuar... ", Colors.CYAN))
+		else:
+			print(c("Opción no válida.", Colors.RED))
+			input(c("Pulsa enter para continuar... ", Colors.CYAN))
+
+
+def search_remote_repository(query: str, categories: Optional[List[str]] = None) -> List[Dict]:
+	"""Busca en el repositorio remoto de GitHub sin descargar archivos.
+	
+	Args:
+		query: Texto a buscar
+		categories: Lista de categorías donde buscar (None = todas)
+		
+	Returns:
+		Lista de canales encontrados con formato {'name': str, 'url': str, 'source': str}
+	"""
+	from m3u_parser import parse_m3u
+	
+	if categories is None:
+		# Buscar en todas las categorías
+		categories_to_search = [cat[0] for cat in POPULAR_CATEGORIES]
+	else:
+		categories_to_search = categories
+	
+	query_lower = query.lower()
+	results: List[Dict] = []
+	
+	print(c(f"Buscando en {len(categories_to_search)} categorías remotas...", Colors.CYAN))
+	
+	for i, category_key in enumerate(categories_to_search, 1):
+		# Buscar el nombre de la categoría
+		category_name = next((cat[1] for cat in POPULAR_CATEGORIES if cat[0] == category_key), category_key)
+		filename = f"{category_key}.m3u"
+		url = f"{GITHUB_REPO_BASE}/{filename}"
+		
+		# Mostrar progreso
+		print(c(f"  [{i}/{len(categories_to_search)}] Buscando en {category_name}...", Colors.CYAN), end='\r', flush=True)
+		
+		# Descargar contenido en memoria
+		content, error = http_fetch_content(url, timeout=30)
+		if error or not content:
+			continue
+		
+		# Parsear M3U
+		try:
+			channels = parse_m3u(content)
+		except Exception:
+			continue
+		
+		# Buscar coincidencias
+		for ch in channels:
+			name = (ch.get('name') or '')
+			url_ch = (ch.get('url') or '')
+			if query_lower in name.lower() or query_lower in url_ch.lower():
+				results.append({
+					'name': name or url_ch,
+					'url': url_ch,
+					'source': f"remote:{category_name}",
+					'category': category_key
+				})
+	
+	# Limpiar línea de progreso
+	print(' ' * 80, end='\r', flush=True)
+	
+	return results
+
+
+def remote_search_menu() -> None:
+	"""Menú para buscar en el repositorio remoto sin descargar."""
+	header("Búsqueda en repositorio remoto")
+	
+	# Cargar historial de búsquedas y sugerencias
+	search_history = load_search_history()
+	favorites = load_favorites()
+	play_history = load_history()
+	
+	# Mostrar búsquedas recientes si existen
+	if search_history:
+		print(c("Búsquedas recientes:", Colors.CYAN))
+		for i, h in enumerate(search_history[:5], 1):
+			print(f"  {c(str(i), Colors.YELLOW)}. {h}")
+		print()
+	
+	# Obtener sugerencias
+	suggestions = get_search_suggestions("", search_history, favorites, play_history)
+	query = prompt_with_suggestions("Texto a buscar (nombre de emisora) o número de sugerencia: ", suggestions, search_history)
+	
+	if not query:
+		print(c("Búsqueda vacía.", Colors.YELLOW))
+		input(c("Pulsa enter para volver... ", Colors.CYAN))
+		return
+	
+	# Validar longitud mínima de búsqueda
+	min_length = CONFIG.get('min_search_length', MIN_SEARCH_LENGTH)
+	try:
+		min_length = int(min_length)
+	except Exception:
+		min_length = MIN_SEARCH_LENGTH
+	
+	if len(query) < min_length:
+		print(c(f"⚠ Búsqueda muy corta ({len(query)} caracteres).", Colors.YELLOW))
+		print(c(f"Se recomienda al menos {min_length} caracteres para evitar resultados excesivos.", Colors.YELLOW))
+		if len(query) == 1:
+			result = prompt_yes_no(f"¿Realmente quieres buscar con solo '{query}'? (puede tardar mucho)", default_yes=False)
+			if result is None or not result:
+				input(c("Pulsa enter para volver... ", Colors.CYAN))
+				return
+		elif len(query) == 2:
+			result = prompt_yes_no(f"¿Continuar con la búsqueda '{query}'? (puede generar muchos resultados)", default_yes=False)
+			if result is None or not result:
+				input(c("Pulsa enter para volver... ", Colors.CYAN))
+				return
+	
+	# Preguntar si buscar en todas las categorías o seleccionar
+	print()
+	print(c("¿Dónde buscar?", Colors.CYAN))
+	print(f"  {c('1.', Colors.YELLOW)} Todas las categorías ({len(POPULAR_CATEGORIES)} categorías)")
+	print(f"  {c('2.', Colors.YELLOW)} Solo estilos más populares ({len(MOST_POPULAR_GENRES)} categorías)")
+	print(f"  {c('3.', Colors.YELLOW)} Seleccionar categorías específicas")
+	print(f"  {c('0.', Colors.YELLOW)} Cancelar (q)")
+	print(c(line(), Colors.BLUE))
+	
+	search_opt = input(c("Selecciona: ", Colors.CYAN)).strip().lower()
+	
+	categories_to_search = None
+	if search_opt == '0' or search_opt == 'q':
+		return
+	elif search_opt == '1':
+		# Todas las categorías
+		categories_to_search = None
+	elif search_opt == '2':
+		# Solo populares
+		categories_to_search = MOST_POPULAR_GENRES
+	elif search_opt == '3':
+		# Selección múltiple
+		selected = multi_select_categories()
+		if not selected:
+			return
+		categories_to_search = [cat[0] for cat in selected]
+	else:
+		print(c("Opción no válida.", Colors.RED))
+		input(c("Pulsa enter para volver... ", Colors.CYAN))
+		return
+	
+	# Añadir a historial de búsquedas
+	add_to_search_history(query)
+	
+	# Realizar búsqueda
+	results = search_remote_repository(query, categories_to_search)
+	
+	if not results:
+		print(c("Sin resultados en el repositorio remoto.", Colors.YELLOW))
+		input(c("Pulsa enter para volver... ", Colors.CYAN))
+		return
+	
+	# Interacción con resultados
+	while True:
+		labels = []
+		for r in results:
+			badge = dim(f"[{r['source']}]")
+			labels.append(f"{r['name']} {badge}")
+		
+		print()
+		header(f"Resultados remotos ({len(results)})")
+		print(f"  {c('1.', Colors.YELLOW)} Aleatorio entre resultados (r)")
+		print(f"  {c('2.', Colors.YELLOW)} {icon('IMPORT')}Descargar categorías de resultados (d)")
+		print(f"  {c('0.', Colors.YELLOW)} Volver (q)")
+		print(c(line(), Colors.BLUE))
+		
+		sel = input(c("Selecciona: ", Colors.CYAN)).strip().lower()
+		
+		if sel in ('0', 'q'):
+			return
+		elif sel in ('1', 'r'):
+			# Bucle aleatorio sobre resultados
+			attempts = 0
+			while True:
+				item = random.choice(results)
+				print(f"{c('Reproduciendo (aleatorio remoto):', Colors.GREEN)} {item['name']} {dim(f'[{item['source']}]')}")
+				try:
+					code = play_with_config(item['url'])
+				except MpvNotFoundError as e:
+					print(str(e))
+					return
+				if code != 0:
+					attempts += 1
+					if attempts <= 3:
+						print(c("Fallo, probando otra emisora...", Colors.YELLOW))
+						continue
+					else:
+						print(c("Demasiados fallos, saliendo del aleatorio.", Colors.RED))
+						return
+				# Solo añadir al historial y ofrecer favoritos si la reproducción fue exitosa
+				append_history(item['name'], item['url'], item['source'])
+				offer_add_favorite(item['name'], item['url'], item['source'])
+				result = prompt_yes_no("¿Reproducir otra emisora aleatoria de los resultados?", default_yes=True)
+				if result is None or not result:
+					return
+			continue
+		elif sel in ('2', 'd'):
+			# Descargar categorías de los resultados
+			categories_found = set(r.get('category', '') for r in results if r.get('category'))
+			if not categories_found:
+				print(c("No se pueden identificar las categorías de los resultados.", Colors.YELLOW))
+				input(c("Pulsa enter para continuar... ", Colors.CYAN))
+				continue
+			
+			categories_to_download = [(key, name) for key, name in POPULAR_CATEGORIES if key in categories_found]
+			names = [cat[1] for cat in categories_to_download]
+			print()
+			print(c(f"Se descargarán {len(categories_to_download)} categorías encontradas:", Colors.CYAN))
+			for name in names:
+				print(f"  - {name}")
+			print()
+			result = prompt_yes_no("¿Continuar con la descarga?", default_yes=True)
+			if result is not None and result:
+				download_multiple_categories(categories_to_download)
+			continue
+		
+		# Selección paginada
+		idx = paginated_select(labels, "Resultados remotos")
+		if idx == 0 or idx == -1:
+			return
+		item = results[idx - 1]
+		print(f"{c('Reproduciendo:', Colors.GREEN)} {item['name']} {dim(f'[{item['source']}]')}")
+		try:
+			code = play_with_config(item['url'])
+		except MpvNotFoundError as e:
+			print(str(e))
+			return
+		# Solo añadir al historial y ofrecer favoritos si la reproducción fue exitosa
+		if code == 0:
+			append_history(item['name'], item['url'], item['source'])
+		offer_add_favorite(item['name'], item['url'], item['source'])
+
+
+def download_multiple_categories(categories: List[tuple]) -> None:
+	"""Descarga múltiples categorías en secuencia."""
+	if not categories:
+		return
+	
+	total = len(categories)
+	success_count = 0
+	failed_count = 0
+	
+	print()
+	print(c(f"Descargando {total} categorías...", Colors.CYAN))
+	print()
+	
+	for i, (category_key, category_name) in enumerate(categories, 1):
+		filename = f"{category_key}.m3u"
+		print(c(f"[{i}/{total}] ", Colors.CYAN), end='', flush=True)
+		success = download_playlist_from_github("", filename, category_name)
+		if success:
+			success_count += 1
+		else:
+			failed_count += 1
+	
+	print()
+	print(c(line(), Colors.BLUE))
+	print(c(f"Descarga completada:", Colors.CYAN))
+	print(c(f"  ✓ Exitosas: {success_count}", Colors.GREEN))
+	if failed_count > 0:
+		print(c(f"  ✗ Fallidas: {failed_count}", Colors.RED))
+	print()
+
+
+def download_playlists_menu() -> None:
+	"""Menú para descargar playlists desde el repositorio de GitHub."""
+	header("Descargar playlists desde GitHub")
+	
+	while True:
+		print()
+		print(c("Repositorio: junguler/m3u-radio-music-playlists", Colors.CYAN))
+		print()
+		print(f"  {c('1.', Colors.YELLOW)} Descargar 'everything-full.m3u' (lista completa)")
+		print(f"  {c('2.', Colors.YELLOW)} Descargar una categoría")
+		print(f"  {c('3.', Colors.YELLOW)} {icon('IMPORT')}Descargar múltiples categorías (selección)")
+		print(f"  {c('4.', Colors.YELLOW)} {icon('STAR')}Descargar estilos más populares ({len(MOST_POPULAR_GENRES)} estilos)")
+		print(f"  {c('0.', Colors.YELLOW)} Volver (q)")
+		print(c(line(), Colors.BLUE))
+		
+		opt = input(c("Selecciona: ", Colors.CYAN)).strip().lower()
+		
+		if opt in ('0', 'q'):
+			return
+		elif opt == '1':
+			# Descargar everything-full.m3u (el archivo real se llama ---everything-full.m3u)
+			success = download_playlist_from_github("", "---everything-full.m3u", "Everything Full")
+			if success:
+				input(c("Pulsa enter para continuar... ", Colors.CYAN))
+			else:
+				input(c("Pulsa enter para continuar... ", Colors.CYAN))
+		elif opt == '2':
+			# Menú de categorías (una sola)
+			header("Seleccionar categoría")
+			categories_list = [f"{cat[1]} ({cat[0]})" for cat in POPULAR_CATEGORIES]
+			idx = paginated_select(categories_list, "Categorías disponibles")
+			
+			if idx == 0:
+				continue
+			if idx > 0 and idx <= len(POPULAR_CATEGORIES):
+				category_key, category_name = POPULAR_CATEGORIES[idx - 1]
+				# El nombre del archivo suele ser el mismo que la categoría con .m3u
+				# Los archivos de categorías están en la raíz, no en subcarpetas
+				filename = f"{category_key}.m3u"
+				success = download_playlist_from_github("", filename, category_name)
+				if success:
+					input(c("Pulsa enter para continuar... ", Colors.CYAN))
+				else:
+					input(c("Pulsa enter para continuar... ", Colors.CYAN))
+		elif opt == '3':
+			# Selección múltiple
+			selected = multi_select_categories()
+			if selected:
+				download_multiple_categories(selected)
+				input(c("Pulsa enter para continuar... ", Colors.CYAN))
+		elif opt == '4':
+			# Descargar estilos más populares directamente
+			popular_categories = [(key, name) for key, name in POPULAR_CATEGORIES if key in MOST_POPULAR_GENRES]
+			names = [cat[1] for cat in popular_categories]
+			print()
+			print(c(f"Se descargarán {len(popular_categories)} estilos más populares:", Colors.CYAN))
+			for name in names:
+				print(f"  - {name}")
+			print()
+			result = prompt_yes_no("¿Continuar con la descarga?", default_yes=True)
+			if result is not None and result:
+				download_multiple_categories(popular_categories)
+				input(c("Pulsa enter para continuar... ", Colors.CYAN))
+
+
 def main() -> int:
 	global SORT_PLAYLISTS_ASC, CONFIG, CURRENT_PAGE_SIZE, SORT_CHANNELS_ASC
 	CONFIG = load_config()
@@ -2296,63 +2864,37 @@ def main() -> int:
 		print()
 		header("Menú principal - cmdRadioPy")
 		print_ascii_logo()
-		print(f"  {c('1.', Colors.YELLOW)} Mostrar canales")
-		print(f"  {c('2.', Colors.YELLOW)} Buscar en canales (/)")
-		print(f"  {c('3.', Colors.YELLOW)} Reproducción aleatoria (r)")
-		print(f"  {c('4.', Colors.YELLOW)} Buscar online (Radio Browser) (b)")
-		print(f"  {c('5.', Colors.YELLOW)} Favoritos")
-		print(f"  {c('6.', Colors.YELLOW)} Historial")
-		print(f"  {c('7.', Colors.YELLOW)} Configuración (c)")
-		print(f"  {c('8.', Colors.YELLOW)} Reproducir último canal (u/l)")
-		print(f"  {c('9.', Colors.YELLOW)} Estadísticas (s)")
-		print(f"  {c('0.', Colors.YELLOW)} Salir (q)")
+		
+		# REPRODUCCIÓN
+		print(c("  ┌─ REPRODUCCIÓN", Colors.CYAN))
+		print(f"  {c('1.', Colors.YELLOW)} {icon('PLAY')}Mostrar canales")
+		print(f"  {c('2.', Colors.YELLOW)} {icon('RANDOM')}Reproducción aleatoria (r)")
+		print(f"  {c('3.', Colors.YELLOW)} {icon('LAST')}Reproducir último canal (u/l)")
+		
+		# BÚSQUEDA
+		print(c("  ┌─ BÚSQUEDA", Colors.CYAN))
+		print(f"  {c('4.', Colors.YELLOW)} {icon('SEARCH')}Buscar en canales locales (/)")
+		print(f"  {c('5.', Colors.YELLOW)} {icon('ONLINE')}Buscar online (Radio Browser) (b)")
+		print(f"  {c('6.', Colors.YELLOW)} {icon('SEARCH')}Buscar en repositorio remoto (g)")
+		
+		# GESTIÓN
+		print(c("  ┌─ GESTIÓN", Colors.CYAN))
+		print(f"  {c('7.', Colors.YELLOW)} {icon('FAVORITE')}Favoritos")
+		print(f"  {c('8.', Colors.YELLOW)} {icon('HISTORY')}Historial")
+		print(f"  {c('9.', Colors.YELLOW)} {icon('STATS')}Estadísticas (s)")
+		
+		# CONFIGURACIÓN Y DATOS
+		print(c("  ┌─ CONFIGURACIÓN Y DATOS", Colors.CYAN))
+		print(f"  {c('10.', Colors.YELLOW)} {icon('IMPORT')}Descargar playlists desde GitHub (d)")
+		print(f"  {c('11.', Colors.YELLOW)} {icon('CONFIG')}Configuración (c)")
+		
+		print()
+		print(f"  {c('0.', Colors.YELLOW)} {icon('EXIT')}Salir (q)")
 		print(c(line(), Colors.BLUE))
 		opt = input(c("Selecciona: ", Colors.CYAN)).strip().lower()
 		if opt in ('0', 'q'):
 			return 0
-		elif opt in ('3', 'r'):
-			random_channel_from_all(pls)
-			continue
-		elif opt in ('4', 'b'):
-			online_search_radio_browser()
-			continue
-		elif opt in ('2', '/'):
-			global_search(pls)
-			continue
-		elif opt == '6':
-			history_menu()
-			continue
-		elif opt == '5':
-			favorites_menu()
-			continue
-		elif opt in ('7', 'c'):
-			config_menu()
-			continue
-		elif opt in ('8', 'u', 'l'):
-			# Reproducir último canal
-			entries = load_history()
-			if entries:
-				last_entry = entries[-1]
-				name = last_entry.get('name') or last_entry.get('url') or ''
-				url = last_entry.get('url') or ''
-				if url:
-					print(f"{c('Reproduciendo último canal:', Colors.GREEN)} {name}")
-					try:
-						play_with_config(url)
-					except MpvNotFoundError as e:
-						print(str(e))
-					append_history(name, url, last_entry.get('source') or 'historial')
-				else:
-					print(c("No hay URL válida en la última entrada.", Colors.RED))
-					input(c("Pulsa enter para continuar... ", Colors.CYAN))
-			else:
-				print(c("No hay historial.", Colors.YELLOW))
-				input(c("Pulsa enter para continuar... ", Colors.CYAN))
-			continue
-		elif opt in ('9', 's'):
-			# Estadísticas
-			stats_menu()
-			continue
+		# REPRODUCCIÓN
 		elif opt == '1':
 			pls = list_playlists()
 			# Filtro para playlists
@@ -2432,6 +2974,61 @@ def main() -> int:
 					continue
 				else:
 					print(c("Opción no válida.", Colors.RED))
+			continue
+		elif opt in ('2', 'r'):
+			random_channel_from_all(pls)
+			continue
+		elif opt in ('3', 'u', 'l'):
+			# Reproducir último canal
+			entries = load_history()
+			if entries:
+				last_entry = entries[-1]
+				name = last_entry.get('name') or last_entry.get('url') or ''
+				url = last_entry.get('url') or ''
+				if url:
+					print(f"{c('Reproduciendo último canal:', Colors.GREEN)} {name}")
+					try:
+						play_with_config(url)
+					except MpvNotFoundError as e:
+						print(str(e))
+					append_history(name, url, last_entry.get('source') or 'historial')
+				else:
+					print(c("No hay URL válida en la última entrada.", Colors.RED))
+					input(c("Pulsa enter para continuar... ", Colors.CYAN))
+			else:
+				print(c("No hay historial.", Colors.YELLOW))
+				input(c("Pulsa enter para continuar... ", Colors.CYAN))
+			continue
+		# BÚSQUEDA
+		elif opt in ('4', '/'):
+			global_search(pls)
+			continue
+		elif opt in ('5', 'b'):
+			online_search_radio_browser()
+			continue
+		elif opt == '6' or opt == 'g':
+			# Búsqueda en repositorio remoto
+			remote_search_menu()
+			continue
+		# GESTIÓN
+		elif opt == '7':
+			favorites_menu()
+			continue
+		elif opt == '8':
+			history_menu()
+			continue
+		elif opt in ('9', 's'):
+			# Estadísticas
+			stats_menu()
+			continue
+		# CONFIGURACIÓN Y DATOS
+		elif opt in ('10', 'd'):
+			# Descargar playlists desde GitHub
+			download_playlists_menu()
+			pls = list_playlists()  # Actualizar lista de playlists
+			continue
+		elif opt in ('11', 'c'):
+			config_menu()
 			continue
 		else:
 			print(c("Opción no válida.", Colors.RED))

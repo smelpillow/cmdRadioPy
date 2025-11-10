@@ -1,6 +1,6 @@
 # cmdRadioPy
 
-```
+```text
                        ______            ___       ______  __   
   _________ ___  ____/ / __ \____ _____/ (_)___  / __ \ \/ /   
  / ___/ __ `__ \/ __  / /_/ / __ `/ __  / / __ \/ /_/ /\  /    
@@ -8,7 +8,7 @@
 \___/_/ /_/ /_/\__,_/_/ |_|\__,_/\__,_/_/\____/_/     /_/      
 ```
 
-Reproductor de radio online, principalmente se nutre de datos de listas .M3U, pero permite busqueda online, reproducción aleatoria y continua, gestión de favoritos, historial de ultimas escuchas y una estadística de uso.
+Reproductor de radio online, principalmente se nutre de datos de listas .M3U, pero permite búsqueda online, reproducción aleatoria y continua, gestión de favoritos, historial de últimas escuchas, estadísticas de uso, descarga de playlists desde GitHub y búsqueda en repositorios remotos.
 
 Escucha radio internacionales o temáticas, todo ello desde tu terminal, consumiendo menos de 15 Megas de memoria RAM.
 
@@ -37,17 +37,28 @@ pip install -r requirements.txt
 python main.py
 ```
 
-3. Menú principal:
+3. Menú principal (organizado por secciones):
+
+   **REPRODUCCIÓN**
    - 1. Mostrar canales (elige playlist y luego canal)
-   - 2. Buscar en canales (búsqueda global en tus playlists) — atajo `/`
-   - 3. Reproducción aleatoria (global) — atajo `r`
-   - 4. Buscar online (Radio Browser) — atajo `b`
-   - 5. Favoritos (incluye editar, exportar JSON/M3U, importar, validar URLs, buscar y aleatorio)
-   - 6. Historial (incluye exportar/importar, limpiar, reproducir último y aleatorio)
-   - 7. Configuración (incluye exportar/importar configuración completa) — atajo `c`
-   - u / l. Reproducir último canal escuchado
-   - s. Estadísticas (top emisoras, resumen, fuentes más usadas)
-   - 8 / Q. Salir
+   - 2. Reproducción aleatoria (global) — atajo `r`
+   - 3. Reproducir último canal — atajo `u`/`l`
+
+   **BÚSQUEDA**
+   - 4. Buscar en canales locales (búsqueda global en tus playlists) — atajo `/`
+   - 5. Buscar online (Radio Browser) — atajo `b`
+   - 6. Buscar en repositorio remoto — atajo `g`
+
+   **GESTIÓN**
+   - 7. Favoritos (incluye editar, exportar JSON/M3U, importar, validar URLs, buscar y aleatorio)
+   - 8. Historial (incluye exportar/importar, limpiar, reproducir último y aleatorio)
+   - 9. Estadísticas (top emisoras, resumen, fuentes más usadas) — atajo `s`
+
+   **CONFIGURACIÓN Y DATOS**
+   - 10. Descargar playlists desde GitHub — atajo `d`
+   - 11. Configuración (incluye exportar/importar configuración completa) — atajo `c`
+
+   - 0. Salir — atajo `q`
 
 4. Durante la reproducción usa la interfaz nativa de mpv (pulsa `q` para salir, etc.).
 
@@ -74,7 +85,7 @@ La interfaz puede mostrar iconos visuales (emojis/Unicode) para mejorar la exper
   - `n` siguiente, `p` anterior, `g` ir a página #, `0`/`q` volver
   - `s` alterna orden A↔Z; `/` filtra
 - Selección de canales: `r` aleatorio entre resultados; `f` añadir/eliminar favorito por número
-- Favoritos: 
+- Favoritos:
   - `e` exportar JSON, `m` exportar M3U, `i` importar, `r` aleatorio
   - `v` validar todas las URLs, `/` buscar/filtrar
   - Editar favoritos desde el submenú (cambiar nombre/URL)
@@ -83,12 +94,44 @@ La interfaz puede mostrar iconos visuales (emojis/Unicode) para mejorar la exper
 - La interfaz usa colores ANSI; en Windows se habilitan automáticamente si `colorama` está instalado.
 - Los conteos de elementos se muestran en títulos y headers para mejor orientación.
 - Estadísticas: muestra top emisoras, totales, fuentes más escuchadas y últimas reproducciones.
+- Búsqueda mejorada: historial de búsquedas, sugerencias inteligentes basadas en favoritos e historial, y validación de longitud mínima.
+- Limpieza automática del historial: configurable por días o número máximo de entradas.
 
-## Búsqueda online (Radio Browser)
+## Búsqueda online
+
+
+### Radio Browser
 
 - Endpoints con fallback; se respeta `user_agent` y `proxy` de `config.json`.
 - Filtros opcionales: país, idioma y bitrate mínimo.
 - Tras la búsqueda, puedes listar resultados, reproducir aleatorio, añadir a favoritos y queda en `history.json`.
+
+### Repositorio remoto (GitHub)
+
+- Búsqueda en tiempo real en el repositorio [junguler/m3u-radio-music-playlists](https://github.com/junguler/m3u-radio-music-playlists) sin descargar archivos.
+- Opciones de búsqueda:
+  - Todas las categorías disponibles (23+ categorías)
+  - Solo estilos más populares (12 categorías)
+  - Selección personalizada de categorías
+- Los resultados se pueden reproducir directamente o descargar las categorías completas.
+- No ocupa espacio en disco: busca sin descargar archivos.
+
+## Descarga de playlists desde GitHub
+
+El programa permite descargar playlists directamente desde el repositorio [junguler/m3u-radio-music-playlists](https://github.com/junguler/m3u-radio-music-playlists), que contiene una extensa colección de listas M3U categorizadas por género musical.
+
+### Opciones disponibles
+
+- **Lista completa**: Descarga `everything-full.m3u` con todas las emisoras disponibles
+- **Una categoría**: Descarga una categoría específica (Rock, Pop, Jazz, etc.)
+- **Múltiples categorías**: Selección personalizada con checkboxes para descargar varias categorías a la vez
+- **Estilos más populares**: Descarga rápida de los 12 estilos más populares con un solo clic
+
+### Categorías disponibles
+
+Rock, Pop, Electronic, Hip Hop, Jazz, Classical, Country, Reggae, Metal, Dance, Techno, House, Trance, Latin, Funk, Blues, Alternative, Indie, Hard Rock, Acid Jazz, Smooth Jazz, Eurodance, J-Pop y más.
+
+> **Agradecimiento**: Este proyecto utiliza y agradece el excelente trabajo del repositorio [junguler/m3u-radio-music-playlists](https://github.com/junguler/m3u-radio-music-playlists) de [@junguler](https://github.com/junguler), que proporciona una extensa colección de listas M3U categorizadas y actualizadas regularmente. ¡Gracias por compartir este valioso recurso con la comunidad!
 
 ## Configuración (`config.json`)
 
@@ -118,6 +161,10 @@ Campos soportados:
 - `validate_urls`: boolean, activa validación de URLs antes de reproducir (por defecto `false`)
 - `url_validation_timeout`: segundos de timeout para validación (1-30, por defecto 5)
 - `show_icons`: boolean, mostrar iconos en la interfaz (por defecto `true`)
+- `min_search_length`: número mínimo de caracteres para búsquedas (por defecto 3)
+- `history_cleanup_mode`: modo de limpieza automática del historial: "none", "days" o "count"
+- `history_cleanup_days`: días de antigüedad para limpiar (si mode es "days")
+- `history_cleanup_max_entries`: número máximo de entradas en historial (si mode es "count")
 
 Ejemplo:
 
@@ -136,7 +183,11 @@ Ejemplo:
   "blacklist": ["demo", "prueba"],
   "validate_urls": false,
   "url_validation_timeout": 5,
-  "show_icons": true
+  "show_icons": true,
+  "min_search_length": 3,
+  "history_cleanup_mode": "none",
+  "history_cleanup_days": 30,
+  "history_cleanup_max_entries": 500
 }
 ```
 
@@ -152,9 +203,10 @@ Ejemplo:
 Los siguientes archivos se guardan automáticamente en el directorio de datos del usuario:
 - **Windows**: `%APPDATA%\cmdRadioPy\`
 - **Linux/Mac**: `~/.config/cmdRadioPy/`
-  - `config.json`: configuración de red, reintentos, densidad UI, volumen, temporizador y blacklist
+  - `config.json`: configuración de red, reintentos, densidad UI, volumen, temporizador, blacklist, validación de URLs, iconos, búsqueda e historial
   - `favorites.json`: favoritos persistentes
-  - `history.json`: historial de reproducciones (recientes)
+  - `history.json`: historial de reproducciones (con limpieza automática opcional)
+  - `search_history.json`: historial de búsquedas para sugerencias
 
 ## Notas
 
