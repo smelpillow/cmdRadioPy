@@ -1867,8 +1867,12 @@ def config_menu() -> None:
 			max_entries = CONFIG.get('history_cleanup_max_entries', 200)
 			cleanup_status = f"por cantidad ({max_entries} entradas)"
 		print(f"  {c('13.', Colors.YELLOW)} {icon('HISTORY')}Limpieza automática del historial: {cleanup_status} (h)")
-		print(f"  {c('14.', Colors.YELLOW)} {icon('EXPORT')}Exportar configuración completa (e)")
-		print(f"  {c('15.', Colors.YELLOW)} {icon('IMPORT')}Importar configuración completa (x)")
+		auto_discover_enabled = CONFIG.get('auto_discover_categories', False)
+		auto_discover_status = 'activada' if auto_discover_enabled else 'desactivada'
+		available_cats_count = len(get_available_categories())
+		print(f"  {c('14.', Colors.YELLOW)} {icon('ONLINE')}Detección automática de categorías: {auto_discover_status} ({available_cats_count} categorías disponibles) (a)")
+		print(f"  {c('15.', Colors.YELLOW)} {icon('EXPORT')}Exportar configuración completa (e)")
+		print(f"  {c('16.', Colors.YELLOW)} {icon('IMPORT')}Importar configuración completa (x)")
 		print(f"  {c('0.', Colors.YELLOW)} Volver (q)")
 		print(c(line(), Colors.BLUE))
 		opt = input(c("Selecciona: ", Colors.CYAN)).strip().lower()
@@ -2031,10 +2035,26 @@ def config_menu() -> None:
 					print(c("Entrada no válida.", Colors.RED))
 			else:
 				print(c("Opción no válida.", Colors.RED))
-		elif opt in ('14', 'e'):
+		elif opt in ('14', 'a'):
+			# Toggle detección automática de categorías
+			current = CONFIG.get('auto_discover_categories', False)
+			CONFIG['auto_discover_categories'] = not current
+			save_config()
+			status = 'activada' if CONFIG['auto_discover_categories'] else 'desactivada'
+			print(c(f"Detección automática de categorías {status}.", Colors.GREEN))
+			if CONFIG['auto_discover_categories']:
+				# Forzar descubrimiento inmediato
+				print(c("Descubriendo categorías disponibles...", Colors.CYAN))
+				discover_categories_from_repo(force_refresh=True)
+				available_cats = get_available_categories()
+				print(c(f"Total de categorías disponibles: {len(available_cats)}", Colors.GREEN))
+			else:
+				available_cats = get_available_categories()
+				print(c(f"Usando solo categorías manuales: {len(available_cats)} categorías", Colors.CYAN))
+		elif opt in ('15', 'e'):
 			export_config_complete()
 			CONFIG = load_config()  # Recargar configuración por si cambió
-		elif opt in ('15', 'x'):
+		elif opt in ('16', 'x'):
 			import_config_complete()
 			CONFIG = load_config()  # Recargar configuración después de importar
 		else:
@@ -2369,6 +2389,58 @@ POPULAR_CATEGORIES = [
 	("smooth_jazz", "Smooth Jazz"),
 	("eurodance", "Eurodance"),
 	("jpop", "J-Pop"),
+	# Categorías adicionales ampliadas
+	("disco", "Disco"),
+	("dubstep", "Dubstep"),
+	("edm", "EDM"),
+	("hardcore", "Hardcore"),
+	("lofi", "Lo-Fi"),
+	("rnb", "R&B"),
+	("rap", "Rap"),
+	("trap", "Trap"),
+	("garage", "Garage"),
+	("goa", "Goa"),
+	("jungle", "Jungle"),
+	("progressive", "Progressive"),
+	("reggaeton", "Reggaeton"),
+	("soundtrack", "Soundtrack"),
+	("oldies", "Oldies"),
+	("classic", "Classic"),
+	("ambient", "Ambient"),
+	("chill", "Chill"),
+	("folk", "Folk"),
+	("gospel", "Gospel"),
+	("grunge", "Grunge"),
+	("industrial", "Industrial"),
+	("kpop", "K-Pop"),
+	("new_age", "New Age"),
+	("punk", "Punk"),
+	("ska", "Ska"),
+	("soul", "Soul"),
+	("synthwave", "Synthwave"),
+	("world_music", "World Music"),
+	("deep_house", "Deep House"),
+	("drum_and_bass", "Drum and Bass"),
+	("minimal_techno", "Minimal Techno"),
+	("post_rock", "Post Rock"),
+	("progressive_house", "Progressive House"),
+	("progressive_metal", "Progressive Metal"),
+	("progressive_rock", "Progressive Rock"),
+	("black_metal", "Black Metal"),
+	("death_metal", "Death Metal"),
+	("heavy_metal", "Heavy Metal"),
+	("soft_rock", "Soft Rock"),
+	("modern_rock", "Modern Rock"),
+	("classic_rock", "Classic Rock"),
+	("alternative_rock", "Alternative Rock"),
+	("pop_rock", "Pop Rock"),
+	("dancehall", "Dancehall"),
+	("roots_reggae", "Roots Reggae"),
+	("lovers_rock_reggae", "Lovers Rock Reggae"),
+	("urban", "Urban"),
+	("hits", "Hits"),
+	("top_40", "Top 40"),
+	("easy_listening", "Easy Listening"),
 ]
 
 # Estilos más populares (selección recomendada)
@@ -2376,6 +2448,132 @@ MOST_POPULAR_GENRES = [
 	"rock", "pop", "electronic", "hip_hop", "jazz", "metal", 
 	"dance", "techno", "house", "trance", "latin", "alternative"
 ]
+
+# Caché para categorías descubiertas automáticamente
+DISCOVERED_CATEGORIES_CACHE: Optional[List[tuple]] = None
+DISCOVERED_CATEGORIES_CACHE_TIME: Optional[float] = None
+CACHE_DURATION_SECONDS = 3600  # 1 hora
+
+
+def discover_categories_from_repo(force_refresh: bool = False) -> List[tuple]:
+	"""
+	Descubre automáticamente las categorías disponibles en el repositorio de GitHub.
+	
+	Usa la API de GitHub para listar archivos .m3u en el repositorio y extrae
+	las categorías de los nombres de archivo.
+	
+	Args:
+		force_refresh: Si es True, fuerza la actualización del caché
+		
+	Returns:
+		Lista de tuplas (category_key, category_name) con las categorías descubiertas
+	"""
+	global DISCOVERED_CATEGORIES_CACHE, DISCOVERED_CATEGORIES_CACHE_TIME
+	
+	# Verificar caché
+	current_time = time.time()
+	if not force_refresh and DISCOVERED_CATEGORIES_CACHE is not None:
+		if DISCOVERED_CATEGORIES_CACHE_TIME is not None:
+			if current_time - DISCOVERED_CATEGORIES_CACHE_TIME < CACHE_DURATION_SECONDS:
+				return DISCOVERED_CATEGORIES_CACHE
+	
+	# Intentar cargar desde caché en disco
+	cache_file = os.path.join(USER_DATA_DIR, 'discovered_categories_cache.json')
+	if not force_refresh and os.path.isfile(cache_file):
+		try:
+			with open(cache_file, 'r', encoding='utf-8') as f:
+				cache_data = json.load(f)
+				cache_time = cache_data.get('timestamp', 0)
+				if current_time - cache_time < CACHE_DURATION_SECONDS:
+					categories = cache_data.get('categories', [])
+					if categories:
+						DISCOVERED_CATEGORIES_CACHE = [(c[0], c[1]) for c in categories]
+						DISCOVERED_CATEGORIES_CACHE_TIME = cache_time
+						return DISCOVERED_CATEGORIES_CACHE
+		except Exception:
+			pass
+	
+	# Usar API de GitHub para descubrir categorías
+	api_url = "https://api.github.com/repos/junguler/m3u-radio-music-playlists/contents/"
+	discovered: List[tuple] = []
+	
+	print(c("Descubriendo categorías disponibles en el repositorio...", Colors.CYAN), end='', flush=True)
+	
+	try:
+		files = http_get_json(api_url, timeout=15)
+		if files and isinstance(files, list):
+			for item in files:
+				if isinstance(item, dict):
+					name = item.get('name', '')
+					# Filtrar solo archivos .m3u (excluir .m3u8 y otros)
+					if name.endswith('.m3u') and not name.startswith('---'):
+						# Extraer categoría del nombre (sin extensión)
+						category_key = name[:-4]  # Quitar .m3u
+						# Convertir a nombre legible
+						category_name = category_key.replace('_', ' ').replace('-', ' ').title()
+						# Limpiar nombres comunes
+						category_name = category_name.replace('Rn B', 'R&B').replace('R N B', 'R&B')
+						category_name = category_name.replace('Hip Hop', 'Hip Hop').replace('Hiphop', 'Hip Hop')
+						discovered.append((category_key, category_name))
+			
+			# Ordenar por nombre
+			discovered.sort(key=lambda x: x[1])
+			
+			# Actualizar caché en memoria
+			DISCOVERED_CATEGORIES_CACHE = discovered
+			DISCOVERED_CATEGORIES_CACHE_TIME = current_time
+			
+			# Guardar en caché en disco
+			try:
+				with open(cache_file, 'w', encoding='utf-8') as f:
+					json.dump({
+						'timestamp': current_time,
+						'categories': discovered
+					}, f, ensure_ascii=False, indent=2)
+			except Exception:
+				pass
+			
+			check_icon = Icons.get_icon('CHECK')
+			print(c(f" {check_icon} {len(discovered)} categorías descubiertas", Colors.GREEN))
+		else:
+			cross_icon = Icons.get_icon('CROSS')
+			print(c(f" {cross_icon} No se pudieron obtener categorías", Colors.YELLOW))
+	except Exception as e:
+		cross_icon = Icons.get_icon('CROSS')
+		print(c(f" {cross_icon} Error: {str(e)}", Colors.RED))
+	
+	return discovered if discovered else []
+
+
+def get_available_categories() -> List[tuple]:
+	"""
+	Retorna las categorías disponibles para búsqueda.
+	
+	Si la detección automática está habilitada, combina las categorías manuales
+	con las descubiertas automáticamente. Si no, solo retorna las manuales.
+	
+	Returns:
+		Lista de tuplas (category_key, category_name) con todas las categorías disponibles
+	"""
+	# Verificar si la detección automática está habilitada
+	auto_discover = CONFIG.get('auto_discover_categories', False)
+	
+	if auto_discover:
+		# Obtener categorías descubiertas
+		discovered = discover_categories_from_repo()
+		
+		# Combinar con categorías manuales (evitando duplicados)
+		manual_keys = {cat[0] for cat in POPULAR_CATEGORIES}
+		all_categories = list(POPULAR_CATEGORIES)
+		
+		for cat in discovered:
+			if cat[0] not in manual_keys:
+				all_categories.append(cat)
+		
+		return all_categories
+	else:
+		# Solo usar categorías manuales
+		return POPULAR_CATEGORIES
 
 
 def download_playlist_from_github(category: str, filename: str, display_name: str) -> bool:
@@ -2445,7 +2643,9 @@ def multi_select_categories() -> List[tuple]:
 		Lista de tuplas (category_key, category_name) seleccionadas.
 	"""
 	selected = set()
-	categories_dict = {cat[0]: cat for cat in POPULAR_CATEGORIES}
+	# Obtener categorías disponibles (puede incluir descubiertas)
+	available_cats = get_available_categories()
+	categories_dict = {cat[0]: cat for cat in available_cats}
 	
 	while True:
 		header("Seleccionar categorías (múltiple)")
@@ -2458,7 +2658,7 @@ def multi_select_categories() -> List[tuple]:
 		print()
 		
 		# Mostrar categorías con checkboxes
-		for i, (key, name) in enumerate(POPULAR_CATEGORIES, 1):
+		for i, (key, name) in enumerate(available_cats, 1):
 			marker = "✓" if key in selected else " "
 			marker_color = Colors.GREEN if key in selected else Colors.WHITE
 			is_popular = "⭐" if key in MOST_POPULAR_GENRES else " "
@@ -2498,8 +2698,8 @@ def multi_select_categories() -> List[tuple]:
 			return selected_list
 		elif choice.isdigit():
 			num = int(choice)
-			if 1 <= num <= len(POPULAR_CATEGORIES):
-				key = POPULAR_CATEGORIES[num - 1][0]
+			if 1 <= num <= len(available_cats):
+				key = available_cats[num - 1][0]
 				if key in selected:
 					selected.remove(key)
 				else:
@@ -2524,9 +2724,12 @@ def search_remote_repository(query: str, categories: Optional[List[str]] = None)
 	"""
 	from m3u_parser import parse_m3u
 	
+	# Obtener categorías disponibles (puede incluir descubiertas automáticamente)
+	available_categories = get_available_categories()
+	
 	if categories is None:
-		# Buscar en todas las categorías
-		categories_to_search = [cat[0] for cat in POPULAR_CATEGORIES]
+		# Buscar en todas las categorías disponibles
+		categories_to_search = [cat[0] for cat in available_categories]
 	else:
 		categories_to_search = categories
 	
@@ -2537,7 +2740,7 @@ def search_remote_repository(query: str, categories: Optional[List[str]] = None)
 	
 	for i, category_key in enumerate(categories_to_search, 1):
 		# Buscar el nombre de la categoría
-		category_name = next((cat[1] for cat in POPULAR_CATEGORIES if cat[0] == category_key), category_key)
+		category_name = next((cat[1] for cat in available_categories if cat[0] == category_key), category_key)
 		filename = f"{category_key}.m3u"
 		url = f"{GITHUB_REPO_BASE}/{filename}"
 		
@@ -2619,10 +2822,17 @@ def remote_search_menu() -> None:
 				input(c("Pulsa enter para volver... ", Colors.CYAN))
 				return
 	
+	# Obtener categorías disponibles (puede incluir descubiertas automáticamente)
+	available_categories = get_available_categories()
+	auto_discover_enabled = CONFIG.get('auto_discover_categories', False)
+	
 	# Preguntar si buscar en todas las categorías o seleccionar
 	print()
 	print(c("¿Dónde buscar?", Colors.CYAN))
-	print(f"  {c('1.', Colors.YELLOW)} Todas las categorías ({len(POPULAR_CATEGORIES)} categorías)")
+	if auto_discover_enabled:
+		print(f"  {c('1.', Colors.YELLOW)} Todas las categorías ({len(available_categories)} categorías, incluye descubiertas)")
+	else:
+		print(f"  {c('1.', Colors.YELLOW)} Todas las categorías ({len(available_categories)} categorías)")
 	print(f"  {c('2.', Colors.YELLOW)} Solo estilos más populares ({len(MOST_POPULAR_GENRES)} categorías)")
 	print(f"  {c('3.', Colors.YELLOW)} Seleccionar categorías específicas")
 	print(f"  {c('0.', Colors.YELLOW)} Cancelar (q)")
@@ -2713,7 +2923,9 @@ def remote_search_menu() -> None:
 				input(c("Pulsa enter para continuar... ", Colors.CYAN))
 				continue
 			
-			categories_to_download = [(key, name) for key, name in POPULAR_CATEGORIES if key in categories_found]
+			# Usar categorías disponibles (puede incluir descubiertas)
+			available_cats = get_available_categories()
+			categories_to_download = [(key, name) for key, name in available_cats if key in categories_found]
 			names = [cat[1] for cat in categories_to_download]
 			print()
 			print(c(f"Se descargarán {len(categories_to_download)} categorías encontradas:", Colors.CYAN))
@@ -2802,13 +3014,14 @@ def download_playlists_menu() -> None:
 		elif opt == '2':
 			# Menú de categorías (una sola)
 			header("Seleccionar categoría")
-			categories_list = [f"{cat[1]} ({cat[0]})" for cat in POPULAR_CATEGORIES]
+			available_cats = get_available_categories()
+			categories_list = [f"{cat[1]} ({cat[0]})" for cat in available_cats]
 			idx = paginated_select(categories_list, "Categorías disponibles")
 			
 			if idx == 0:
 				continue
-			if idx > 0 and idx <= len(POPULAR_CATEGORIES):
-				category_key, category_name = POPULAR_CATEGORIES[idx - 1]
+			if idx > 0 and idx <= len(available_cats):
+				category_key, category_name = available_cats[idx - 1]
 				# El nombre del archivo suele ser el mismo que la categoría con .m3u
 				# Los archivos de categorías están en la raíz, no en subcarpetas
 				filename = f"{category_key}.m3u"
@@ -2825,7 +3038,8 @@ def download_playlists_menu() -> None:
 				input(c("Pulsa enter para continuar... ", Colors.CYAN))
 		elif opt == '4':
 			# Descargar estilos más populares directamente
-			popular_categories = [(key, name) for key, name in POPULAR_CATEGORIES if key in MOST_POPULAR_GENRES]
+			available_cats = get_available_categories()
+			popular_categories = [(key, name) for key, name in available_cats if key in MOST_POPULAR_GENRES]
 			names = [cat[1] for cat in popular_categories]
 			print()
 			print(c(f"Se descargarán {len(popular_categories)} estilos más populares:", Colors.CYAN))
