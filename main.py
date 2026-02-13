@@ -522,7 +522,12 @@ def online_search_radio_browser() -> None:
 				item = random.choice(pool)
 				print(f"{c('Reproduciendo (online aleatorio):', Colors.GREEN)} {item['name']} {dim(item['source'])}")
 				try:
-					code = play_with_config(item['url'], item.get('name'))
+					code = play_with_config(
+						item['url'],
+						item.get('name'),
+						play_mode="Aleatorio (online)",
+						source=item.get('source'),
+					)
 				except MpvNotFoundError as e:
 					print(str(e))
 					return
@@ -547,7 +552,12 @@ def online_search_radio_browser() -> None:
 		item = results[idx - 1]
 		print(f"{c('Reproduciendo:', Colors.GREEN)} {item['name']} {dim(item['source'])}")
 		try:
-			code = play_with_config(item['url'], item.get('name'))
+			code = play_with_config(
+				item['url'],
+				item.get('name'),
+				play_mode="Búsqueda online",
+				source=item.get('source'),
+			)
 		except MpvNotFoundError as e:
 			print(str(e))
 			return
@@ -603,7 +613,12 @@ def _osd_log(message: str) -> None:
 		pass
 
 
-def play_with_config(url: str, station_name: Optional[str] = None) -> int:
+def play_with_config(
+	url: str,
+	station_name: Optional[str] = None,
+	play_mode: Optional[str] = None,
+	source: Optional[str] = None,
+) -> int:
 	# Validar URL si está activada la opción
 	validate = CONFIG.get('validate_urls')
 	if isinstance(validate, bool) and validate:
@@ -638,11 +653,23 @@ def play_with_config(url: str, station_name: Optional[str] = None) -> int:
 			print(c("OSD propia activada (logo, barra, botones). Conectando a mpv...", Colors.CYAN))
 			_osd_log("OSD activada, iniciando reproducción con IPC")
 			try:
-				code = play_url_with_custom_osd(url, station_name, extra_args=extra, draw_osd_cb=draw_custom_osd, log_cb=_osd_log)
+				_osd_hide_cursor()
+				code = play_url_with_custom_osd(
+					url,
+					station_name,
+					play_mode=play_mode,
+					source=source,
+					extra_args=extra,
+					draw_osd_cb=draw_custom_osd,
+					log_cb=_osd_log,
+				)
 			except Exception as ex:
 				print(c(f"Error al usar OSD propia: {ex}", Colors.RED))
 				_osd_log(f"Error OSD: {ex}")
 				code = play_url(url, extra_args=extra)
+			finally:
+				_osd_show_cursor()
+				_osd_reset_state()
 		else:
 			code = play_url(url, extra_args=extra)
 		if code == 0:
@@ -1311,7 +1338,12 @@ def favorites_menu() -> None:
 				name = fav.get('name') or fav.get('url') or ''
 				print(f"{c('Reproduciendo (aleatorio favoritos):', Colors.GREEN)} {name}")
 				try:
-					code = play_with_config(fav.get('url') or '', name)
+					code = play_with_config(
+						fav.get('url') or '',
+						name,
+						play_mode="Aleatorio (favoritos)",
+						source=fav.get('source'),
+					)
 				except MpvNotFoundError as e:
 					print(str(e))
 					break
@@ -1346,7 +1378,12 @@ def favorites_menu() -> None:
 				break
 			elif opt == '1':
 				try:
-					play_with_config(fav.get('url') or '', fav.get('name'))
+					play_with_config(
+						fav.get('url') or '',
+						fav.get('name'),
+						play_mode="Favoritos",
+						source=fav.get('source'),
+					)
 				except MpvNotFoundError as e:
 					print(str(e))
 			elif opt == '2':
@@ -1488,7 +1525,12 @@ def global_search(playlists: List[str]) -> None:
 				item = random.choice(results)
 				print(f"{c('Reproduciendo (aleatorio):', Colors.GREEN)} {item['name']} {dim(f'[{item['source']}]')}")
 				try:
-					code = play_with_config(item['url'], item.get('name'))
+					code = play_with_config(
+						item['url'],
+						item.get('name'),
+						play_mode="Aleatorio (repo)",
+						source=item.get('source'),
+					)
 				except MpvNotFoundError as e:
 					print(str(e))
 					return
@@ -1514,7 +1556,12 @@ def global_search(playlists: List[str]) -> None:
 		item = results[idx - 1]
 		print(f"{c('Reproduciendo:', Colors.GREEN)} {item['name']} {dim(f'[{item['source']}]')}")
 		try:
-			play_with_config(item['url'], item.get('name'))
+			play_with_config(
+				item['url'],
+				item.get('name'),
+				play_mode="Búsqueda repositorio",
+				source=item.get('source'),
+			)
 		except MpvNotFoundError as e:
 			print(str(e))
 		append_history(item['name'], item['url'], item['source'])
@@ -1576,7 +1623,7 @@ def select_and_play(channels: List[Dict], source: Optional[str] = None) -> None:
 				name = channel.get('name') or url
 				print(f"{c('Reproduciendo (aleatorio):', Colors.GREEN)} {name}")
 				try:
-					code = play_with_config(url, name)
+					code = play_with_config(url, name, play_mode="Aleatorio", source=source)
 				except MpvNotFoundError as e:
 					print(str(e))
 					return
@@ -1642,7 +1689,7 @@ def select_and_play(channels: List[Dict], source: Optional[str] = None) -> None:
 		print(f"{c('Reproduciendo:', Colors.GREEN)} {name}")
 		start_time = time.time()
 		try:
-			code = play_with_config(url, name)
+			code = play_with_config(url, name, source=source)
 		except MpvNotFoundError as e:
 			print(str(e))
 			return
@@ -1675,7 +1722,12 @@ def random_channel_from_all(playlists: List[str]) -> None:
 		name = channel.get('name') or channel.get('url')
 		print(f"{c('Reproduciendo aleatorio global:', Colors.GREEN)} [{pl}] {name}")
 		try:
-			code = play_with_config(channel.get('url'), name)
+			code = play_with_config(
+				channel.get('url'),
+				name,
+				play_mode="Aleatorio (global)",
+				source=pl,
+			)
 		except MpvNotFoundError as e:
 			print(str(e))
 			return
@@ -1692,10 +1744,10 @@ def random_channel_from_all(playlists: List[str]) -> None:
 # Logo ASCII para menú y OSD de reproducción
 OSD_LOGO_LINES = [
 	"                       ______            ___       ______  __   ",
-	"  _________ ___  ____/ / __ \____ _____/ (_)___  / __ \ \/ /   ",
-	" / ___/ __ `__ \/ __  / /_/ / __ `/ __  / / __ \/ /_/ /\  /    ",
+	r"  _________ ___  ____/ / __ \____ _____/ (_)___  / __ \ \/ /   ",
+	r" / ___/ __ `__ \/ __  / /_/ / __ `/ __  / / __ \/ /_/ /\  /    ",
 	"/ /__/ / / / / / /_/ / _, _/ /_/ / /_/ / / /_/ / ____/ / /     ",
-	"\___/_/ /_/ /_/\__,_/_/ |_|\__,_/\__,_/_/\____/_/     /_/      ",
+	r"\___/_/ /_/ /_/\__,_/_/ |_|\__,_/\__,_/_/\____/_/     /_/      ",
 ]
 
 def print_ascii_logo() -> None:
@@ -1720,18 +1772,78 @@ def _format_time_hms(seconds: float) -> str:
 	return f"{m:02d}:{s:02d}"
 
 
-# Número de líneas que ocupa la OSD (logo 5 + blank + progreso + separador + emisora + ahora suena + volumen + pausa + botones = 13)
-OSD_LINE_COUNT = 13
+# Número de líneas que ocupa la OSD (logo 5 + blank + progreso + separador + modo + emisora + ahora suena + pausa + botones + espacios)
+OSD_LINE_COUNT = 19
 
 # Último estado mostrado en OSD (para no redibujar si no cambió)
 _osd_last_state: Optional[dict] = None
+_osd_cursor_hidden = False
+
+
+def _osd_hide_cursor() -> None:
+	"""Oculta el cursor del terminal durante la OSD propia."""
+	global _osd_cursor_hidden
+	if _osd_cursor_hidden:
+		return
+	try:
+		sys.stdout.write("\033[?25l")
+		sys.stdout.flush()
+		_osd_cursor_hidden = True
+	except Exception:
+		pass
+
+
+def _osd_show_cursor() -> None:
+	"""Restaura el cursor del terminal al salir de la OSD propia."""
+	global _osd_cursor_hidden
+	if not _osd_cursor_hidden:
+		return
+	try:
+		sys.stdout.write("\033[?25h")
+		sys.stdout.flush()
+	except Exception:
+		pass
+	_osd_cursor_hidden = False
+
+
+def _osd_reset_state() -> None:
+	"""Resetea el estado de OSD para la siguiente reproducción."""
+	global _osd_last_state
+	_osd_last_state = None
+
+
+def _is_favorite(channel_url: str) -> bool:
+	"""Verifica si una URL está en favoritos."""
+	if not channel_url:
+		return False
+	favs = load_favorites()
+	return any((f.get('url') or '').strip() == channel_url.strip() for f in favs)
+
+
+def _toggle_favorite(channel_url: str, station_name: Optional[str]) -> bool:
+	"""Toggle favorito para una URL. Retorna True si ahora está en favoritos."""
+	if not channel_url:
+		return False
+	favs = load_favorites()
+	if any((f.get('url') or '').strip() == channel_url.strip() for f in favs):
+		# Eliminar
+		favs = [f for f in favs if (f.get('url') or '').strip() != channel_url.strip()]
+		save_favorites(favs)
+		return False
+	else:
+		# Añadir
+		add_favorite(station_name or 'Radio', channel_url, None)
+		return True
 
 
 def _osd_display_state(state: dict) -> dict:
 	"""Estado reducido para comparación: evita parpadeo redibujando solo cuando cambia."""
 	return {
+		"play_mode": (state.get("play_mode") or "").strip(),
 		"station_name": (state.get("station_name") or "").strip(),
 		"media_title": (state.get("media_title") or "").strip(),
+		"channel_url": (state.get("channel_url") or "").strip(),
+		"source": (state.get("source") or "").strip(),
 		"pause": bool(state.get("pause")),
 		"mute": bool(state.get("mute")),
 		"volume": state.get("volume") or 0,
@@ -1743,13 +1855,22 @@ def _osd_display_state(state: dict) -> dict:
 	}
 
 
-def draw_custom_osd(state: dict, first_time: bool) -> None:
+def draw_custom_osd(state: dict, first_time: bool, key: Optional[str] = None) -> None:
 	"""
 	Dibuja la OSD propia: logo ASCII, barra de progreso, emisora/título y botones.
-	state: volume, mute, pause, media_title, time_pos, duration, station_name.
+	state: volume, mute, pause, media_title, time_pos, duration, station_name, play_mode, channel_url, source.
+	key: tecla especial (ej. 'f' para toggle favorito).
 	"""
 	import sys
 	global _osd_last_state
+	
+	# Si se presionó 'f', toggle favorito
+	if key == "f" and state.get("channel_url"):
+		try:
+			_toggle_favorite(state.get("channel_url"), state.get("station_name"))
+		except Exception:
+			pass
+	
 	display = _osd_display_state(state)
 	skipped = not first_time and _osd_last_state is not None and display == _osd_last_state
 	if skipped:
@@ -1761,7 +1882,7 @@ def draw_custom_osd(state: dict, first_time: bool) -> None:
 		sys.stdout.flush()
 
 	w = term_width()
-	pad_logo = max(0, (w - max(len(l) for l in OSD_LOGO_LINES)) // 2)
+	pad_logo = 0
 
 	# Líneas a imprimir (sin ANSI de color en el conteo para cursor up)
 	lines_out: List[str] = []
@@ -1784,36 +1905,50 @@ def draw_custom_osd(state: dict, first_time: bool) -> None:
 		indet = "─" * (min(20, w // 3)) + "  En directo"
 		lines_out.append(c(f"  {elapsed}  ", Colors.DIM) + c(indet, Colors.BLUE))
 
-	lines_out.append(c("─" * min(w, 60), Colors.DIM))
+	lines_out.append(c("─" * w, Colors.DIM))
+	lines_out.append("")
 
-	# Emisora (solo nombre)
+	# Modo de reproducción
+	mode = (state.get("play_mode") or "").strip() or "Normal"
+	mode_line = "  Modo: " + mode
+	lines_out.append(c(mode_line[:w], Colors.GREEN))
+	lines_out.append("")
+
+	# Emisora (solo nombre) + indicador de favorito
 	station = (state.get("station_name") or "").strip()
-	lines_out.append(c(("  " + (station or "Reproduciendo"))[:w], Colors.CYAN))
+	channel_url = state.get("channel_url") or ""
+	source = (state.get("source") or "").strip()
+	is_fav = _is_favorite(channel_url) if channel_url else False
+	fav_icon = "⭐" if is_fav else "☆"
+	station_line = f"  {fav_icon} " + (station or "Reproduciendo")
+	lines_out.append(c(station_line[:w], Colors.WHITE))
+	source_line = ""
+	if source and source.lower().endswith((".m3u", ".m3u8")):
+		source_line = f"  M3U: {source}"
+	lines_out.append(c(source_line[:w], Colors.DIM) if source_line else "")
+	lines_out.append("")
 
 	# Ahora suena: título de la pista (media-title o metadata/icy-title en radio)
 	title = (state.get("media_title") or "").strip()
 	now_line = "  Ahora suena: " + (title[:w - 18] if title else "—")
-	lines_out.append(c(now_line[:w], Colors.CYAN))
+	lines_out.append(c(now_line[:w], Colors.MAGENTA))
+	lines_out.append("")
 
-	# Volumen (contador) y [ MUTE ] si aplica
+	# Estado pausa: [ PAUSADO ] o línea en blanco
 	vol = state.get("volume") or 0
 	mute = state.get("mute") or False
 	pause = state.get("pause") or False
-	vol_line = f"  Volumen: {vol} %"
-	if mute:
-		vol_line += "  [ MUTE ]"
-	lines_out.append(c(vol_line[:w], Colors.YELLOW if mute else Colors.CYAN))
-
-	# Estado pausa: [ PAUSADO ] o línea en blanco
 	pause_line = "  [ PAUSADO ]" if pause else "  "
 	lines_out.append(c(pause_line[:w], Colors.GREEN if pause else Colors.DIM))
+	lines_out.append("")
 
 	# Botones y estado (iconos ▶/⏸, 🔇/🔈)
 	play_icon = getattr(Icon, "PAUSE", "⏸") if pause else getattr(Icon, "PLAY", "▶")
 	mute_icon = "🔇" if mute else "🔈"
 	p_btn = c(f"{play_icon} Pausa", Colors.GREEN if pause else Colors.WHITE)
 	m_btn = c(f"{mute_icon} Mute", Colors.GREEN if mute else Colors.WHITE)
-	btns = f"  {p_btn}  [+] Vol+  [-] Vol-  {m_btn}  Vol:{vol}  [Q] Salir"
+	q_btn = c("[Q] Salir", Colors.MAGENTA)
+	btns = f"  {p_btn}  [+] Vol+  [-] Vol-  {m_btn}  Vol:{vol}  [F] Fav  {q_btn}"
 	lines_out.append(c(btns[:w], Colors.YELLOW))
 
 	if not first_time:
@@ -2418,7 +2553,7 @@ def history_menu() -> None:
 				if url:
 					print(f"{c('Reproduciendo último:', Colors.GREEN)} {name}")
 					try:
-						play_with_config(url, name)
+						play_with_config(url, name, source=last_entry.get('source'))
 					except MpvNotFoundError as e:
 						print(str(e))
 					append_history(name, url, last_entry.get('source') or 'historial')
@@ -2482,7 +2617,7 @@ def history_menu() -> None:
 				name = entry.get('name') or entry.get('url') or ''
 				print(f"{c('Reproduciendo (aleatorio historial):', Colors.GREEN)} {name}")
 				try:
-					code = play_with_config(entry.get('url') or '', name)
+					code = play_with_config(entry.get('url') or '', name, source=entry.get('source'))
 				except MpvNotFoundError as e:
 					print(str(e))
 					break
@@ -2508,7 +2643,7 @@ def history_menu() -> None:
 		entry = list(reversed(entries))[idx - 1]
 		print(f"{c('Reproduciendo desde historial:', Colors.GREEN)} {entry.get('name')}")
 		try:
-			play_with_config(entry.get('url') or '', entry.get('name'))
+			play_with_config(entry.get('url') or '', entry.get('name'), source=entry.get('source'))
 		except MpvNotFoundError as e:
 			print(str(e))
 		append_history(entry.get('name') or '', entry.get('url') or '', entry.get('source') or '')
@@ -3050,7 +3185,7 @@ def remote_search_menu() -> None:
 				item = random.choice(results)
 				print(f"{c('Reproduciendo (aleatorio remoto):', Colors.GREEN)} {item['name']} {dim(f'[{item['source']}]')}")
 				try:
-					code = play_with_config(item['url'], item.get('name'))
+					code = play_with_config(item['url'], item.get('name'), source=item.get('source'))
 				except MpvNotFoundError as e:
 					print(str(e))
 					return
@@ -3098,7 +3233,7 @@ def remote_search_menu() -> None:
 		item = results[idx - 1]
 		print(f"{c('Reproduciendo:', Colors.GREEN)} {item['name']} {dim(f'[{item['source']}]')}")
 		try:
-			code = play_with_config(item['url'], item.get('name'))
+			code = play_with_config(item['url'], item.get('name'), source=item.get('source'))
 		except MpvNotFoundError as e:
 			print(str(e))
 			return
@@ -3318,7 +3453,7 @@ def main() -> int:
 						name = channel.get('name') or channel.get('url')
 						print(f"{c('Reproduciendo (aleatorio en playlist):', Colors.GREEN)} {name}")
 						try:
-							code = play_with_config(channel.get('url'), name)
+							code = play_with_config(channel.get('url'), name, source=filtered_pls[idx - 1])
 						except MpvNotFoundError as e:
 							print(str(e))
 							break
@@ -3356,7 +3491,7 @@ def main() -> int:
 				if url:
 					print(f"{c('Reproduciendo último canal:', Colors.GREEN)} {name}")
 					try:
-						play_with_config(url, name)
+						play_with_config(url, name, source=last_entry.get('source'))
 					except MpvNotFoundError as e:
 						print(str(e))
 					append_history(name, url, last_entry.get('source') or 'historial')

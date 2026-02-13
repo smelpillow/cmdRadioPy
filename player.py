@@ -158,7 +158,34 @@ def _ipc_recv(conn: Any, timeout_sec: float = 0.4) -> Optional[Dict[str, Any]]:
 					break
 			return json.loads(buf.decode("utf-8").strip())
 		else:
-			# Windows: pipe sin timeout nativo; leer línea
+			# Windows: pipe sin timeout nativo; usar PeekNamedPipe para evitar bloqueo
+			def _win_pipe_available(pipe_conn: Any) -> int:
+				try:
+					import ctypes
+					import ctypes.wintypes as wintypes
+					import msvcrt  # type: ignore
+					handle = msvcrt.get_osfhandle(pipe_conn.fileno())
+					avail = wintypes.DWORD()
+					res = ctypes.windll.kernel32.PeekNamedPipe(
+						wintypes.HANDLE(handle),
+						None,
+						0,
+						None,
+						ctypes.byref(avail),
+						None,
+					)
+					if res == 0:
+						return 0
+					return int(avail.value)
+				except Exception:
+					return 0
+
+			deadline = time.monotonic() + timeout_sec
+			while _win_pipe_available(conn) <= 0:
+				if time.monotonic() >= deadline:
+					return None
+				time.sleep(0.02)
+
 			buf = b""
 			while True:
 				ch = conn.read(1)
@@ -176,9 +203,13 @@ def _ipc_get_property(conn: Any, prop: str) -> Optional[Any]:
 	"""Obtiene una propiedad de mpv vía IPC. Retorna el valor o None."""
 	req_id = hash((prop, time.time())) % (2 ** 31)
 	_ipc_send(conn, {"request_id": req_id, "command": ["get_property", prop]})
-	resp = _ipc_recv(conn)
-	if resp and resp.get("request_id") == req_id and "data" in resp:
-		return resp["data"]
+	# Ignorar eventos asíncronos hasta recibir la respuesta con el request_id.
+	for _ in range(12):
+		resp = _ipc_recv(conn)
+		if not resp:
+			return None
+		if resp.get("request_id") == req_id and "data" in resp:
+			return resp["data"]
 	return None
 
 
@@ -270,13 +301,15 @@ def _read_key_with_timeout(timeout_sec: float) -> str:
 def play_url_with_custom_osd(
 	url: str,
 	station_name: Optional[str],
+	play_mode: Optional[str] = None,
+	source: Optional[str] = None,
 	extra_args: Optional[List[str]] = None,
 	draw_osd_cb: Optional[Callable[[Dict[str, Any], bool], None]] = None,
 	log_cb: Optional[Callable[[str], None]] = None,
 ) -> int:
 	"""
 	Reproduce una URL con mpv en segundo plano y OSD propia en terminal.
-	draw_osd_cb(state, first_time) se llama con el estado (volume, mute, pause, media_title, time_pos, duration, station_name).
+	draw_osd_cb(state, first_time) se llama con el estado (volume, mute, pause, media_title, time_pos, duration, station_name, play_mode, channel_url, source).
 	log_cb(message) opcional para registrar mensajes (ej. fallo IPC).
 	"""
 	mpv = ensure_mpv()
@@ -387,7 +420,7 @@ def play_url_with_custom_osd(
 					except Exception:
 						pass
 					time.sleep(0.1)
-					state = _gather_mpv_state(conn, station_name)
+					state = _gather_mpv_state(conn, station_name, play_mode, url, source)
 					if state.get("pause"):
 						_ipc_show_text(conn, ass_color_bold("Pausado", 255, 200, 0), 1500)
 					else:
@@ -398,7 +431,7 @@ def play_url_with_custom_osd(
 					except Exception:
 						pass
 					time.sleep(0.1)
-					state = _gather_mpv_state(conn, station_name)
+					state = _gather_mpv_state(conn, station_name, play_mode, url, source)
 					vol = state.get("volume", 0)
 					_ipc_show_text(conn, ass_color_bold(f"Vol: {vol}%", 0, 255, 0), 1500)
 				elif k == "-":
@@ -407,7 +440,7 @@ def play_url_with_custom_osd(
 					except Exception:
 						pass
 					time.sleep(0.1)
-					state = _gather_mpv_state(conn, station_name)
+					state = _gather_mpv_state(conn, station_name, play_mode, url, source)
 					vol = state.get("volume", 0)
 					_ipc_show_text(conn, ass_color_bold(f"Vol: {vol}%", 0, 255, 0), 1500)
 				elif k == "m":
@@ -416,19 +449,25 @@ def play_url_with_custom_osd(
 					except Exception:
 						pass
 					time.sleep(0.1)
-					state = _gather_mpv_state(conn, station_name)
+					state = _gather_mpv_state(conn, station_name, play_mode, url, source)
 					if state.get("mute"):
 						_ipc_show_text(conn, ass_color_bold("Mute", 255, 100, 0), 1500)
 					else:
 						_ipc_show_text(conn, ass_color("Sonido", 0, 255, 0), 1500)
-				if draw_osd_cb:
-					state = _gather_mpv_state(conn, station_name)
-					draw_osd_cb(state, first_draw)
-					first_draw = False
+				elif k == "f":
+					# Tecla 'f' para toggle favorito (se maneja en draw_osd_cb con key param)
+					if draw_osd_cb:
+						state = _gather_mpv_state(conn, station_name, play_mode, url, source)
+						draw_osd_cb(state, first_draw, key="f")
+						first_draw = False
+			if draw_osd_cb:
+				state = _gather_mpv_state(conn, station_name, play_mode, url, source)
+				draw_osd_cb(state, first_draw)
+				first_draw = False
 			else:
 				# Timeout: actualizar OSD
 				if draw_osd_cb:
-					state = _gather_mpv_state(conn, station_name)
+					state = _gather_mpv_state(conn, station_name, play_mode, url, source)
 					draw_osd_cb(state, first_draw)
 					first_draw = False
 	finally:
@@ -443,7 +482,13 @@ def play_url_with_custom_osd(
 	return proc.returncode or 0
 
 
-def _gather_mpv_state(conn: Any, station_name: Optional[str]) -> Dict[str, Any]:
+def _gather_mpv_state(
+	conn: Any,
+	station_name: Optional[str],
+	play_mode: Optional[str],
+	channel_url: Optional[str] = None,
+	source: Optional[str] = None,
+) -> Dict[str, Any]:
 	"""Recoge volumen, mute, pause, media-title, time-pos, duration y opcionalmente codec/bitrate desde mpv IPC."""
 	state: Dict[str, Any] = {
 		"volume": 0,
@@ -453,6 +498,9 @@ def _gather_mpv_state(conn: Any, station_name: Optional[str]) -> Dict[str, Any]:
 		"time_pos": 0.0,
 		"duration": None,
 		"station_name": station_name or "",
+		"play_mode": play_mode or "",
+		"channel_url": channel_url or "",
+		"source": source or "",
 		"audio_codec": None,
 		"audio_bitrate_kbps": None,
 		"samplerate_hz": None,
@@ -465,13 +513,13 @@ def _gather_mpv_state(conn: Any, station_name: Optional[str]) -> Dict[str, Any]:
 		state["mute"] = bool(m)
 		p = _ipc_get_property(conn, "pause")
 		state["pause"] = bool(p)
-		t = _ipc_get_property(conn, "media-title")
-		state["media_title"] = (str(t).strip() if t is not None else "") or ""
-		# En streams de radio, mpv suele dejar media-title vacío; el título viene de ICY (Icecast/Shoutcast).
-		if not state["media_title"]:
-			icy = _ipc_get_property(conn, "metadata/icy-title")
-			if icy is not None and str(icy).strip():
-				state["media_title"] = str(icy).strip()
+		# En streams de radio, el título suele venir de ICY (Icecast/Shoutcast).
+		icy = _ipc_get_property(conn, "metadata/icy-title")
+		if icy is not None and str(icy).strip():
+			state["media_title"] = str(icy).strip()
+		else:
+			t = _ipc_get_property(conn, "media-title")
+			state["media_title"] = (str(t).strip() if t is not None else "") or ""
 		tp = _ipc_get_property(conn, "time-pos")
 		state["time_pos"] = float(tp) if tp is not None else 0.0
 		d = _ipc_get_property(conn, "duration")
