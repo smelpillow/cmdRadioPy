@@ -8,6 +8,8 @@ import sys
 import time
 from typing import Any, Callable, Dict, List, Optional
 
+PLAYER_EXIT_NEXT = 20
+
 class MpvNotFoundError(RuntimeError):
 	pass
 
@@ -366,7 +368,7 @@ def play_url_with_custom_osd(
 					pass
 				return proc.returncode if proc.returncode is not None else 1
 			try:
-				print("No se pudo conectar al IPC de mpv. Reproducción sin OSD (controles: p, +, -, m, q).")
+				print("No se pudo conectar al IPC de mpv. Reproducción sin OSD (controles: p, +, -, m, n, q).")
 				print(f"Ruta IPC: {ipc_path}")
 			except Exception:
 				pass
@@ -380,6 +382,13 @@ def play_url_with_custom_osd(
 				if key and key.lower() == "q":
 					_send_cmd(proc, b"quit\n")
 					break
+				if key and key.lower() == "n":
+					_send_cmd(proc, b"quit\n")
+					try:
+						proc.wait(timeout=5)
+					except Exception:
+						pass
+					return PLAYER_EXIT_NEXT
 				if key:
 					k = key.lower()
 					if k == "p":
@@ -414,6 +423,16 @@ def play_url_with_custom_osd(
 					except Exception:
 						pass
 					return 0
+				if k == "n":
+					try:
+						_ipc_send(conn, {"command": ["quit"]})
+					except Exception:
+						pass
+					try:
+						proc.wait(timeout=5)
+					except Exception:
+						pass
+					return PLAYER_EXIT_NEXT
 				if k == "p":
 					try:
 						_ipc_send(conn, {"command": ["cycle", "pause"]})

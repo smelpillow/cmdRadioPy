@@ -44,7 +44,14 @@ except ImportError:
 		FILTER = "🔎"
 
 from m3u_parser import parse_m3u_file
-from player import play_url, play_url_with_custom_osd, MpvNotFoundError
+from player import play_url, play_url_with_custom_osd, MpvNotFoundError, PLAYER_EXIT_NEXT
+from version import (
+	APP_NAME,
+	APP_VERSION,
+	DEFAULT_USER_AGENT,
+	EXPORT_SCHEMA_VERSION,
+	UNPLAYABLE_SCHEMA_VERSION,
+)
 
 
 BASE_DIR = os.path.dirname(__file__)
@@ -68,6 +75,8 @@ FAVORITES_FILE = os.path.join(USER_DATA_DIR, 'favorites.json')
 HISTORY_FILE = os.path.join(USER_DATA_DIR, 'history.json')
 CONFIG_FILE = os.path.join(USER_DATA_DIR, 'config.json')
 SEARCH_HISTORY_FILE = os.path.join(USER_DATA_DIR, 'search_history.json')
+UNPLAYABLE_STATIONS_FILE = os.path.join(USER_DATA_DIR, 'unplayable_stations.json')
+UNPLAYABLE_THRESHOLD = 3
 
 # Estado de configuración (editable en tiempo de ejecución)
 CURRENT_PAGE_SIZE = 20
@@ -298,7 +307,7 @@ def build_opener_from_config():
 	if proxy:
 		handlers.append(urllib.request.ProxyHandler({'http': proxy, 'https': proxy}))
 	opener = urllib.request.build_opener(*handlers) if handlers else urllib.request.build_opener()
-	ua = CONFIG.get('user_agent') or 'cmdRadioPy/1.0'
+	ua = CONFIG.get('user_agent') or DEFAULT_USER_AGENT
 	opener.addheaders = [('User-Agent', ua), ('Accept', 'application/json')]
 	return opener
 
@@ -405,9 +414,149 @@ def filter_not_blacklisted(items: List[Dict]) -> List[Dict]:
 	for it in items:
 		name = it.get('name') or it.get('url') or ''
 		url = it.get('url') or ''
-		if not is_blacklisted(name, url):
+		if not is_blacklisted(name, url) and not is_unplayable(url):
 			res.append(it)
 	return res
+
+
+def normalize_station_url(url: str) -> str:
+	"""Normaliza una URL para usarla como clave de estado."""
+	if not url:
+		return ''
+	try:
+		from urllib.parse import urlsplit, urlunsplit
+		parts = urlsplit(url.strip())
+		scheme = (parts.scheme or '').lower()
+		netloc = (parts.netloc or '').lower()
+		path = parts.path or ''
+		query = parts.query or ''
+		if (scheme == 'http' and netloc.endswith(':80')) or (scheme == 'https' and netloc.endswith(':443')):
+			netloc = netloc.rsplit(':', 1)[0]
+		return urlunsplit((scheme, netloc, path, query, ''))
+	except Exception:
+		return url.strip().lower()
+
+
+def load_unplayable_stations() -> Dict[str, Dict]:
+	if not os.path.isfile(UNPLAYABLE_STATIONS_FILE):
+		return {}
+	try:
+		with open(UNPLAYABLE_STATIONS_FILE, 'r', encoding='utf-8') as f:
+			data = json.load(f)
+		if not isinstance(data, dict):
+			return {}
+		schema = data.get('schema_version', data.get('version', 1))
+		if not isinstance(schema, int):
+			schema = 1
+		stations = data.get('stations', {})
+		if isinstance(stations, dict):
+			return stations
+	except Exception:
+		pass
+	return {}
+
+
+def save_unplayable_stations(stations: Dict[str, Dict]) -> None:
+	payload = {
+		'schema_version': UNPLAYABLE_SCHEMA_VERSION,
+		'threshold': UNPLAYABLE_THRESHOLD,
+		'stations': stations,
+	}
+	try:
+		with open(UNPLAYABLE_STATIONS_FILE, 'w', encoding='utf-8') as f:
+			json.dump(payload, f, ensure_ascii=False, indent=2)
+	except Exception:
+		pass
+
+
+def is_unplayable(url: str) -> bool:
+	key = normalize_station_url(url)
+	if not key:
+		return False
+	stations = load_unplayable_stations()
+	entry = stations.get(key)
+	if not isinstance(entry, dict):
+		return False
+	return bool(entry.get('blocked'))
+
+
+def register_initial_connect_failure(url: str, name: Optional[str], source: Optional[str]) -> int:
+	"""Suma un fallo de conexión inicial y marca como no reproducible al llegar al umbral."""
+	key = normalize_station_url(url)
+	if not key:
+		return 0
+	stations = load_unplayable_stations()
+	entry = stations.get(key)
+	if not isinstance(entry, dict):
+		entry = {
+			'url': url,
+			'name': name or url,
+			'fail_count': 0,
+			'blocked': False,
+			'last_source': source or '',
+			'last_fail_ts': 0,
+		}
+	fail_count = int(entry.get('fail_count') or 0) + 1
+	entry['fail_count'] = fail_count
+	entry['name'] = name or entry.get('name') or url
+	entry['url'] = url or entry.get('url')
+	entry['last_source'] = source or entry.get('last_source') or ''
+	entry['last_fail_ts'] = int(time.time())
+	if fail_count >= UNPLAYABLE_THRESHOLD:
+		entry['blocked'] = True
+	stations[key] = entry
+	save_unplayable_stations(stations)
+	return fail_count
+
+
+def list_unplayable_stations() -> List[Dict]:
+	stations = load_unplayable_stations()
+	items: List[Dict] = []
+	for key, entry in stations.items():
+		if not isinstance(entry, dict):
+			continue
+		if not entry.get('blocked'):
+			continue
+		items.append({
+			'key': key,
+			'url': entry.get('url') or key,
+			'name': entry.get('name') or entry.get('url') or key,
+			'fail_count': int(entry.get('fail_count') or 0),
+			'last_source': entry.get('last_source') or '',
+			'last_fail_ts': int(entry.get('last_fail_ts') or 0),
+		})
+	items.sort(key=lambda x: x.get('last_fail_ts', 0), reverse=True)
+	return items
+
+
+def clear_unplayable_station(url: str) -> bool:
+	key = normalize_station_url(url)
+	if not key:
+		return False
+	stations = load_unplayable_stations()
+	if key not in stations:
+		return False
+	del stations[key]
+	save_unplayable_stations(stations)
+	return True
+
+
+def clear_all_unplayable_stations() -> int:
+	stations = load_unplayable_stations()
+	blocked_keys = [k for k, v in stations.items() if isinstance(v, dict) and v.get('blocked')]
+	for key in blocked_keys:
+		del stations[key]
+	save_unplayable_stations(stations)
+	return len(blocked_keys)
+
+
+def _is_initial_connect_failure(url: str, elapsed_sec: float) -> bool:
+	"""Heurística para distinguir fallo de conexión inicial de otros fallos."""
+	# Si el stream duró bastante, no se considera fallo inicial.
+	if elapsed_sec > 12:
+		return False
+	# Revalidar rápido la URL: si no responde, lo tratamos como fallo inicial.
+	return not validate_url(url, timeout=3)
 
 
 def online_search_radio_browser() -> None:
@@ -515,7 +664,7 @@ def online_search_radio_browser() -> None:
 		if sel in ('1', 'r'):
 			attempts = 0
 			while True:
-				pool = results
+				pool = [r for r in results if not is_unplayable(r.get('url') or '')]
 				if not pool:
 					print(c("No hay resultados para aleatorio.", Colors.RED))
 					return
@@ -531,6 +680,8 @@ def online_search_radio_browser() -> None:
 				except MpvNotFoundError as e:
 					print(str(e))
 					return
+				if code == PLAYER_EXIT_NEXT:
+					continue
 				if code != 0:
 					attempts += 1
 					if attempts <= 3:
@@ -579,7 +730,7 @@ def validate_url(url: str, timeout: int = 5) -> bool:
 	try:
 		req = urllib.request.Request(url, method='GET')
 		req.add_header('Range', 'bytes=0-1')  # Solo pedir los primeros bytes
-		req.add_header('User-Agent', CONFIG.get('user_agent') or 'cmdRadioPy/1.0')
+		req.add_header('User-Agent', CONFIG.get('user_agent') or DEFAULT_USER_AGENT)
 		
 		# Configurar proxy si existe
 		if CONFIG.get('proxy'):
@@ -619,6 +770,11 @@ def play_with_config(
 	play_mode: Optional[str] = None,
 	source: Optional[str] = None,
 ) -> int:
+	if is_unplayable(url):
+		print(c("Esta emisora está marcada como no reproducible (3 fallos de conexión inicial).", Colors.YELLOW))
+		print(c("Revísala en Configuración > Revisar no reproducibles.", Colors.DIM))
+		return 3
+
 	# Validar URL si está activada la opción
 	validate = CONFIG.get('validate_urls')
 	if isinstance(validate, bool) and validate:
@@ -631,8 +787,11 @@ def play_with_config(
 		icon_val = icon('VALIDATE')
 		print(c(f"{icon_val}Validando URL...", Colors.CYAN), end='', flush=True)
 		if not validate_url(url, timeout=timeout):
+			count = register_initial_connect_failure(url, station_name, source)
 			cross_icon = Icons.get_icon('CROSS')
 			print(c(f" {cross_icon} URL no disponible", Colors.RED))
+			if count >= UNPLAYABLE_THRESHOLD:
+				print(c("Emisora marcada como no reproducible.", Colors.YELLOW))
 			return 1  # Código de error
 		check_icon = Icons.get_icon('CHECK')
 		print(c(f" {check_icon} URL válida", Colors.GREEN))
@@ -649,6 +808,7 @@ def play_with_config(
 		delay = 2
 	attempt = 0
 	while True:
+		attempt_start = time.time()
 		if CONFIG.get('use_custom_osd'):
 			print(c("OSD propia activada (logo, barra, botones). Conectando a mpv...", Colors.CYAN))
 			_osd_log("OSD activada, iniciando reproducción con IPC")
@@ -672,8 +832,15 @@ def play_with_config(
 				_osd_reset_state()
 		else:
 			code = play_url(url, extra_args=extra)
+		if code == PLAYER_EXIT_NEXT:
+			return PLAYER_EXIT_NEXT
 		if code == 0:
 			return 0
+		elapsed = time.time() - attempt_start
+		if _is_initial_connect_failure(url, elapsed):
+			count = register_initial_connect_failure(url, station_name, source)
+			if count >= UNPLAYABLE_THRESHOLD:
+				print(c("Emisora marcada como no reproducible.", Colors.YELLOW))
 		if attempt >= retries:
 			return code
 		print(c(f"Fallo de reproducción (código {code}). Reintentando...", Colors.YELLOW))
@@ -1334,7 +1501,11 @@ def favorites_menu() -> None:
 		if cmd in ('4', 'r'):
 			attempts = 0
 			while True:
-				fav = random.choice(favs)
+				pool = [f for f in favs if not is_unplayable(f.get('url') or '')]
+				if not pool:
+					print(c("No hay favoritos reproducibles para aleatorio.", Colors.RED))
+					break
+				fav = random.choice(pool)
 				name = fav.get('name') or fav.get('url') or ''
 				print(f"{c('Reproduciendo (aleatorio favoritos):', Colors.GREEN)} {name}")
 				try:
@@ -1347,6 +1518,8 @@ def favorites_menu() -> None:
 				except MpvNotFoundError as e:
 					print(str(e))
 					break
+				if code == PLAYER_EXIT_NEXT:
+					continue
 				if code != 0:
 					attempts += 1
 					if attempts <= 3:
@@ -1522,7 +1695,11 @@ def global_search(playlists: List[str]) -> None:
 			# Bucle aleatorio sobre resultados + oferta favoritos
 			attempts = 0
 			while True:
-				item = random.choice(results)
+				pool = [r for r in results if not is_unplayable(r.get('url') or '')]
+				if not pool:
+					print(c("No hay resultados reproducibles para aleatorio.", Colors.RED))
+					return
+				item = random.choice(pool)
 				print(f"{c('Reproduciendo (aleatorio):', Colors.GREEN)} {item['name']} {dim(f'[{item['source']}]')}")
 				try:
 					code = play_with_config(
@@ -1534,6 +1711,8 @@ def global_search(playlists: List[str]) -> None:
 				except MpvNotFoundError as e:
 					print(str(e))
 					return
+				if code == PLAYER_EXIT_NEXT:
+					continue
 				if code != 0:
 					attempts += 1
 					if attempts <= 3:
@@ -1556,7 +1735,7 @@ def global_search(playlists: List[str]) -> None:
 		item = results[idx - 1]
 		print(f"{c('Reproduciendo:', Colors.GREEN)} {item['name']} {dim(f'[{item['source']}]')}")
 		try:
-			play_with_config(
+			code = play_with_config(
 				item['url'],
 				item.get('name'),
 				play_mode="Búsqueda repositorio",
@@ -1564,9 +1743,11 @@ def global_search(playlists: List[str]) -> None:
 			)
 		except MpvNotFoundError as e:
 			print(str(e))
-		append_history(item['name'], item['url'], item['source'])
-		# Ofrecer añadir a favoritos tras reproducir
-		offer_add_favorite(item['name'], item['url'], item['source'])
+			continue
+		if code == 0:
+			append_history(item['name'], item['url'], item['source'])
+			# Ofrecer añadir a favoritos tras reproducir
+			offer_add_favorite(item['name'], item['url'], item['source'])
 
 
 def toggle_favorite_by_index(channels: List[Dict], idx: int, source: Optional[str]) -> None:
@@ -1627,6 +1808,8 @@ def select_and_play(channels: List[Dict], source: Optional[str] = None) -> None:
 				except MpvNotFoundError as e:
 					print(str(e))
 					return
+				if code == PLAYER_EXIT_NEXT:
+					continue
 				if code != 0:
 					attempts += 1
 					if attempts <= 3:
@@ -1731,6 +1914,8 @@ def random_channel_from_all(playlists: List[str]) -> None:
 		except MpvNotFoundError as e:
 			print(str(e))
 			return
+		if code == PLAYER_EXIT_NEXT:
+			continue
 		if code != 0:
 			print(c("Fallo, probando otra emisora...", Colors.YELLOW))
 			continue
@@ -1947,8 +2132,9 @@ def draw_custom_osd(state: dict, first_time: bool, key: Optional[str] = None) ->
 	mute_icon = "🔇" if mute else "🔈"
 	p_btn = c(f"{play_icon} Pausa", Colors.GREEN if pause else Colors.WHITE)
 	m_btn = c(f"{mute_icon} Mute", Colors.GREEN if mute else Colors.WHITE)
+	n_btn = c("[N] Siguiente", Colors.CYAN)
 	q_btn = c("[Q] Salir", Colors.MAGENTA)
-	btns = f"  {p_btn}  [+] Vol+  [-] Vol-  {m_btn}  Vol:{vol}  [F] Fav  {q_btn}"
+	btns = f"  {p_btn}  [+] Vol+  [-] Vol-  {m_btn}  Vol:{vol}  [F] Fav  {n_btn}  {q_btn}"
 	lines_out.append(c(btns[:w], Colors.YELLOW))
 
 	if not first_time:
@@ -1967,13 +2153,17 @@ def export_config_complete() -> None:
 	config_data = CONFIG.copy()
 	favorites_data = load_favorites()
 	history_data = load_history()
+	unplayable_data = load_unplayable_stations()
 	
 	export_data = {
-		'version': '1.0',
+		'legacy_version': '1.0',
+		'app_version': APP_VERSION,
+		'export_schema_version': EXPORT_SCHEMA_VERSION,
 		'export_date': time.strftime('%Y-%m-%d %H:%M:%S'),
 		'config': config_data,
 		'favorites': favorites_data,
 		'history': history_data,
+		'unplayable_stations': unplayable_data,
 	}
 	
 	path = input(c("Ruta destino (ej. cmdRadioPy_backup.json): ", Colors.CYAN)).strip()
@@ -1993,6 +2183,7 @@ def export_config_complete() -> None:
 		print(c(f"  - Configuración: {len(config_data)} opciones", Colors.DIM))
 		print(c(f"  - Favoritos: {len(favorites_data)} emisoras", Colors.DIM))
 		print(c(f"  - Historial: {len(history_data)} entradas", Colors.DIM))
+		print(c(f"  - No reproducibles: {len(unplayable_data)} emisoras", Colors.DIM))
 	except Exception as e:
 		print(c(f"Error al exportar: {e}", Colors.RED))
 	
@@ -2037,11 +2228,17 @@ def import_config_complete() -> None:
 	config_count = len(data.get('config', {})) if isinstance(data.get('config'), dict) else 0
 	fav_count = len(data.get('favorites', [])) if isinstance(data.get('favorites'), list) else 0
 	hist_count = len(data.get('history', [])) if isinstance(data.get('history'), list) else 0
+	unplayable_count = len(data.get('unplayable_stations', {})) if isinstance(data.get('unplayable_stations'), dict) else 0
 	
 	print(c("Datos a importar:", Colors.CYAN))
 	print(c(f"  - Configuración: {config_count} opciones", Colors.DIM))
 	print(c(f"  - Favoritos: {fav_count} emisoras", Colors.DIM))
 	print(c(f"  - Historial: {hist_count} entradas", Colors.DIM))
+	print(c(f"  - No reproducibles: {unplayable_count} emisoras", Colors.DIM))
+	if data.get('app_version'):
+		print(c(f"  - Versión app exportada: {data.get('app_version')}", Colors.DIM))
+	if data.get('export_schema_version'):
+		print(c(f"  - Esquema exportación: {data.get('export_schema_version')}", Colors.DIM))
 	
 	if 'export_date' in data:
 		print(c(f"  - Fecha de exportación: {data.get('export_date')}", Colors.DIM))
@@ -2064,6 +2261,10 @@ def import_config_complete() -> None:
 		return
 	import_history = prompt_yes_no("¿Importar historial?", default_yes=True)
 	if import_history is None:
+		input(c("Pulsa enter para volver... ", Colors.CYAN))
+		return
+	import_unplayable = prompt_yes_no("¿Importar emisoras no reproducibles?", default_yes=True)
+	if import_unplayable is None:
 		input(c("Pulsa enter para volver... ", Colors.CYAN))
 		return
 	
@@ -2095,6 +2296,11 @@ def import_config_complete() -> None:
 	if import_history and isinstance(data.get('history'), list):
 		save_history(data['history'])
 		imported.append("historial")
+
+	# Importar emisoras no reproducibles
+	if import_unplayable and isinstance(data.get('unplayable_stations'), dict):
+		save_unplayable_stations(data['unplayable_stations'])
+		imported.append("no reproducibles")
 	
 	if imported:
 		print(c(f"Importación exitosa: {', '.join(imported)}", Colors.GREEN))
@@ -2102,6 +2308,71 @@ def import_config_complete() -> None:
 		print(c("No se importó nada.", Colors.YELLOW))
 	
 	input(c("Pulsa enter para volver... ", Colors.CYAN))
+
+
+def review_unplayable_stations_menu() -> None:
+	"""Permite revisar y limpiar emisoras marcadas como no reproducibles."""
+	while True:
+		blocked = list_unplayable_stations()
+		header("Revisar emisoras no reproducibles")
+		if not blocked:
+			print(c("No hay emisoras marcadas como no reproducibles.", Colors.GREEN))
+			input(c("Pulsa enter para volver... ", Colors.CYAN))
+			return
+
+		print(c(f"Total marcadas: {len(blocked)}", Colors.CYAN))
+		print()
+		for i, item in enumerate(blocked[:10], 1):
+			name = item.get('name') or item.get('url') or ''
+			fail_count = item.get('fail_count') or 0
+			src = item.get('last_source') or ''
+			badge = dim(f"[{src}]") if src else ''
+			print(f"  {c(str(i) + '.', Colors.YELLOW)} {name[:60]} {badge} {dim(f'(fallos: {fail_count})')}")
+
+		print()
+		print(f"  {c('1.', Colors.YELLOW)} Listar todas")
+		print(f"  {c('2.', Colors.YELLOW)} Desmarcar una")
+		print(f"  {c('3.', Colors.YELLOW)} Desmarcar todas")
+		print(f"  {c('0.', Colors.YELLOW)} Volver (q)")
+		print(c(line(), Colors.BLUE))
+		opt = input(c("Selecciona: ", Colors.CYAN)).strip().lower()
+
+		if opt in ('0', 'q'):
+			return
+		if opt == '1':
+			labels = []
+			for item in blocked:
+				name = item.get('name') or item.get('url') or ''
+				url = item.get('url') or ''
+				fail_count = item.get('fail_count') or 0
+				labels.append(f"{name} {dim(f'(fallos: {fail_count})')} {dim(url)}")
+			_ = paginated_select(labels, "No reproducibles")
+			continue
+		if opt == '2':
+			labels = []
+			for item in blocked:
+				name = item.get('name') or item.get('url') or ''
+				fail_count = item.get('fail_count') or 0
+				labels.append(f"{name} {dim(f'(fallos: {fail_count})')}")
+			idx = paginated_select(labels, "Desmarcar emisora")
+			if idx in (0, -1):
+				continue
+			item = blocked[idx - 1]
+			if clear_unplayable_station(item.get('url') or ''):
+				print(c("Emisora desmarcada.", Colors.GREEN))
+			else:
+				print(c("No se pudo desmarcar la emisora.", Colors.RED))
+			input(c("Pulsa enter para continuar... ", Colors.CYAN))
+			continue
+		if opt == '3':
+			result = prompt_yes_no("¿Desmarcar todas las emisoras no reproducibles?", default_yes=False)
+			if result is True:
+				count = clear_all_unplayable_stations()
+				print(c(f"Se desmarcaron {count} emisoras.", Colors.GREEN))
+				input(c("Pulsa enter para continuar... ", Colors.CYAN))
+			continue
+
+		print(c("Opción no válida.", Colors.RED))
 
 
 # --- Menú de configuración ---
@@ -2147,6 +2418,7 @@ def config_menu() -> None:
 		print(f"  {c('15.', Colors.YELLOW)} OSD propia (logo, barra, botones en terminal): {custom_osd_status} (o)")
 		print(f"  {c('16.', Colors.YELLOW)} {icon('EXPORT')}Exportar configuración completa (e)")
 		print(f"  {c('17.', Colors.YELLOW)} {icon('IMPORT')}Importar configuración completa (x)")
+		print(f"  {c('18.', Colors.YELLOW)} Revisar emisoras no reproducibles (n)")
 		print(f"  {c('0.', Colors.YELLOW)} Volver (q)")
 		print(c(line(), Colors.BLUE))
 		opt = input(c("Selecciona: ", Colors.CYAN)).strip().lower()
@@ -2336,6 +2608,9 @@ def config_menu() -> None:
 		elif opt in ('17', 'x'):
 			import_config_complete()
 			CONFIG = load_config()  # Recargar configuración después de importar
+		elif opt in ('18', 'n'):
+			review_unplayable_stations_menu()
+			CONFIG = load_config()
 		else:
 			print(c("Opción no válida.", Colors.RED))
 
@@ -2553,10 +2828,12 @@ def history_menu() -> None:
 				if url:
 					print(f"{c('Reproduciendo último:', Colors.GREEN)} {name}")
 					try:
-						play_with_config(url, name, source=last_entry.get('source'))
+						code = play_with_config(url, name, source=last_entry.get('source'))
 					except MpvNotFoundError as e:
 						print(str(e))
-					append_history(name, url, last_entry.get('source') or 'historial')
+					else:
+						if code == 0:
+							append_history(name, url, last_entry.get('source') or 'historial')
 				else:
 					print(c("No hay URL válida en la última entrada.", Colors.RED))
 			else:
@@ -2613,7 +2890,11 @@ def history_menu() -> None:
 		if cmd in ('4', 'r'):
 			attempts = 0
 			while True:
-				entry = random.choice(entries)
+				pool = [e for e in entries if not is_unplayable(e.get('url') or '')]
+				if not pool:
+					print(c("No hay entradas reproducibles en historial para aleatorio.", Colors.RED))
+					break
+				entry = random.choice(pool)
 				name = entry.get('name') or entry.get('url') or ''
 				print(f"{c('Reproduciendo (aleatorio historial):', Colors.GREEN)} {name}")
 				try:
@@ -2621,6 +2902,8 @@ def history_menu() -> None:
 				except MpvNotFoundError as e:
 					print(str(e))
 					break
+				if code == PLAYER_EXIT_NEXT:
+					continue
 				if code != 0:
 					attempts += 1
 					if attempts <= 3:
@@ -2643,10 +2926,12 @@ def history_menu() -> None:
 		entry = list(reversed(entries))[idx - 1]
 		print(f"{c('Reproduciendo desde historial:', Colors.GREEN)} {entry.get('name')}")
 		try:
-			play_with_config(entry.get('url') or '', entry.get('name'), source=entry.get('source'))
+			code = play_with_config(entry.get('url') or '', entry.get('name'), source=entry.get('source'))
 		except MpvNotFoundError as e:
 			print(str(e))
-		append_history(entry.get('name') or '', entry.get('url') or '', entry.get('source') or '')
+			continue
+		if code == 0:
+			append_history(entry.get('name') or '', entry.get('url') or '', entry.get('source') or '')
 
 
 # --- Descarga de listas desde GitHub ---
@@ -3182,13 +3467,19 @@ def remote_search_menu() -> None:
 			# Bucle aleatorio sobre resultados
 			attempts = 0
 			while True:
-				item = random.choice(results)
+				pool = [r for r in results if not is_unplayable(r.get('url') or '')]
+				if not pool:
+					print(c("No hay resultados remotos reproducibles para aleatorio.", Colors.RED))
+					return
+				item = random.choice(pool)
 				print(f"{c('Reproduciendo (aleatorio remoto):', Colors.GREEN)} {item['name']} {dim(f'[{item['source']}]')}")
 				try:
 					code = play_with_config(item['url'], item.get('name'), source=item.get('source'))
 				except MpvNotFoundError as e:
 					print(str(e))
 					return
+				if code == PLAYER_EXIT_NEXT:
+					continue
 				if code != 0:
 					attempts += 1
 					if attempts <= 3:
@@ -3240,7 +3531,7 @@ def remote_search_menu() -> None:
 		# Solo añadir al historial y ofrecer favoritos si la reproducción fue exitosa
 		if code == 0:
 			append_history(item['name'], item['url'], item['source'])
-		offer_add_favorite(item['name'], item['url'], item['source'])
+			offer_add_favorite(item['name'], item['url'], item['source'])
 
 
 def download_multiple_categories(categories: List[tuple]) -> None:
@@ -3357,16 +3648,18 @@ def main() -> int:
 	SORT_CHANNELS_ASC = (sort_ch != 'desc')
 
 	enable_colors_on_windows()
-	header("Menú principal - cmdRadioPy")
+	header(f"Menú principal - {APP_NAME} v{APP_VERSION}")
 	print_ascii_logo()
+	print(c(f"Versión: {APP_VERSION}", Colors.DIM))
 	pls = list_playlists()
 	if not pls:
 		print(f"No se encontraron listas en '{PLAYLISTS_DIR}'. Añade archivos .m3u/.m3u8.")
 		return 1
 	while True:
 		print()
-		header("Menú principal - cmdRadioPy")
+		header(f"Menú principal - {APP_NAME} v{APP_VERSION}")
 		print_ascii_logo()
+		print(c(f"Versión: {APP_VERSION}", Colors.DIM))
 		
 		# REPRODUCCIÓN
 		print(c("  ┌─ REPRODUCCIÓN", Colors.CYAN))
@@ -3447,6 +3740,10 @@ def main() -> int:
 					break
 				elif sub in ('2', 'r'):
 					channels_sorted = sorted(channels, key=lambda ch: (ch.get('name') or ch.get('url') or '').lower(), reverse=not SORT_CHANNELS_ASC)
+					channels_sorted = [ch for ch in channels_sorted if not is_unplayable(ch.get('url') or '')]
+					if not channels_sorted:
+						print(c("No hay canales reproducibles en esta playlist.", Colors.RED))
+						continue
 					attempts = 0
 					while True:
 						channel = random.choice(channels_sorted)
@@ -3457,6 +3754,8 @@ def main() -> int:
 						except MpvNotFoundError as e:
 							print(str(e))
 							break
+						if code == PLAYER_EXIT_NEXT:
+							continue
 						if code != 0:
 							attempts += 1
 							if attempts <= 3:
@@ -3491,10 +3790,12 @@ def main() -> int:
 				if url:
 					print(f"{c('Reproduciendo último canal:', Colors.GREEN)} {name}")
 					try:
-						play_with_config(url, name, source=last_entry.get('source'))
+						code = play_with_config(url, name, source=last_entry.get('source'))
 					except MpvNotFoundError as e:
 						print(str(e))
-					append_history(name, url, last_entry.get('source') or 'historial')
+					else:
+						if code == 0:
+							append_history(name, url, last_entry.get('source') or 'historial')
 				else:
 					print(c("No hay URL válida en la última entrada.", Colors.RED))
 					input(c("Pulsa enter para continuar... ", Colors.CYAN))
@@ -3538,6 +3839,9 @@ def main() -> int:
 
 
 if __name__ == '__main__':
+	if len(sys.argv) > 1 and sys.argv[1] in ('--version', '-v'):
+		print(f"{APP_NAME} {APP_VERSION}")
+		sys.exit(0)
 	try:
 		sys.exit(main())
 	except KeyboardInterrupt:

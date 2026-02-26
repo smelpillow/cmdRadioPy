@@ -37,6 +37,12 @@ pip install -r requirements.txt
 python main.py
 ```
 
+Para ver la versión actual:
+
+```bash
+python main.py --version
+```
+
 3. Menú principal (organizado por secciones):
 
    **REPRODUCCIÓN**
@@ -91,6 +97,9 @@ La interfaz puede mostrar iconos visuales (emojis/Unicode) para mejorar la exper
   - Editar favoritos desde el submenú (cambiar nombre/URL)
 - Historial: `l` reproducir último canal, `c` limpiar historial completo, `r` aleatorio
 - Aleatorio: se omiten emisoras en `blacklist` y si falla la reproducción se prueba otra automáticamente (hasta 3 intentos)
+- OSD propia (si está activada): tecla/botón `N` para “Siguiente canal”; en modos aleatorios salta directamente a otra emisora sin contar como fallo.
+- Control de errores de emisoras: tras 3 fallos acumulados de conexión inicial, una emisora se marca como no reproducible y se omite en selección/aleatorio.
+- Revisión de no reproducibles: desde Configuración puedes listar emisoras marcadas, desmarcar una o desmarcar todas.
 - La interfaz usa colores ANSI; en Windows se habilitan automáticamente si `colorama` está instalado.
 - Los conteos de elementos se muestran en títulos y headers para mejor orientación.
 - Estadísticas: muestra top emisoras, totales, fuentes más escuchadas y últimas reproducciones.
@@ -143,7 +152,7 @@ Archivo opcional ubicado en el directorio de datos del usuario:
 
 Desde el menú de configuración (opción 7), puedes:
 - **Exportar (e)**: Guarda en un archivo JSON toda tu configuración, favoritos e historial. Útil para hacer backups o transferir a otro sistema.
-- **Importar (i)**: Restaura configuración, favoritos e historial desde un archivo de exportación. Permite elegir qué importar y muestra un resumen antes de confirmar.
+- **Importar (i)**: Restaura configuración, favoritos, historial y emisoras no reproducibles desde un archivo de exportación. Permite elegir qué importar y muestra un resumen antes de confirmar.
 
 Campos soportados:
 
@@ -197,6 +206,7 @@ Ejemplo:
 - `main.py`: CLI con paginación, columnas, colores, búsqueda, favoritos (export/import/aleatorio), configuración, historial (export/import/aleatorio) y búsqueda online con filtros
 - `m3u_parser.py`: parser de playlists `.m3u/.m3u8`
 - `player.py`: integración con `mpv` en modo audio (sin vídeo)
+- `version.py`: versión central de la app (`APP_VERSION`) y metadatos de versionado
 - `playlists/`: tus listas M3U/M3U8 (dentro del proyecto)
 
 ### Archivos de usuario (directorio de datos)
@@ -207,6 +217,7 @@ Los siguientes archivos se guardan automáticamente en el directorio de datos de
   - `favorites.json`: favoritos persistentes
   - `history.json`: historial de reproducciones (con limpieza automática opcional)
   - `search_history.json`: historial de búsquedas para sugerencias
+  - `unplayable_stations.json`: emisoras marcadas como no reproducibles por fallos de conexión inicial
 
 ## Notas
 
