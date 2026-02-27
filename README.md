@@ -1,12 +1,10 @@
 # cmdRadioPy
 
-```text
                        ______            ___       ______  __   
   _________ ___  ____/ / __ \____ _____/ (_)___  / __ \ \/ /   
  / ___/ __ `__ \/ __  / /_/ / __ `/ __  / / __ \/ /_/ /\  /    
 / /__/ / / / / / /_/ / _, _/ /_/ / /_/ / / /_/ / ____/ / /     
 \___/_/ /_/ /_/\__,_/_/ |_|\__,_/\__,_/_/\____/_/     /_/      
-```
 
 Reproductor de radio online, principalmente se nutre de datos de listas .M3U, pero permite búsqueda online, reproducción aleatoria y continua, gestión de favoritos, historial de últimas escuchas, estadísticas de uso, descarga de playlists desde GitHub y búsqueda en repositorios remotos.
 

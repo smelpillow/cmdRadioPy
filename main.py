@@ -810,6 +810,7 @@ def play_with_config(
 	while True:
 		attempt_start = time.time()
 		if CONFIG.get('use_custom_osd'):
+			refresh_osd_logo()
 			print(c("OSD propia activada (logo, barra, botones). Conectando a mpv...", Colors.CYAN))
 			_osd_log("OSD activada, iniciando reproducción con IPC")
 			try:
@@ -1926,21 +1927,77 @@ def random_channel_from_all(playlists: List[str]) -> None:
 		if result is None or not result:
 			break
 
-# Logo ASCII para menú y OSD de reproducción
-OSD_LOGO_LINES = [
+# Logo ASCII para reproducción (OSD aleatorio) y menú (fijo)
+LOGO_HEIGHT = 5
+LOGO_WIDTH = 78
+
+LOGO_VARIANTS = [
+	[
+		r"   ██████╗███╗   ███╗██████╗ ██████╗  █████╗ ██████╗ ██╗ ██████╗ ██╗   ██╗   ",
+		r"  ██╔════╝████╗ ████║██╔══██╗██╔══██╗██╔══██╗██╔══██╗██║██╔═══██╗╚██╗ ██╔╝   ",
+		r"  ██║     ██╔████╔██║██║  ██║██████╔╝███████║██║  ██║██║██║   ██║ ╚████╔╝    ",
+		r"  ██║     ██║╚██╔╝██║██║  ██║██╔══██╗██╔══██║██║  ██║██║██║   ██║  ╚██╔╝     ",
+		r"  ╚██████╗██║ ╚═╝ ██║██████╔╝██║  ██║██║  ██║██████╔╝██║╚██████╔╝   ██║   PS> ",
+	],
+	[
+		r"   ▄████▄   ███▄ ▄███▓▓█████▄  ██▀███   ▄▄▄      ▓█████▄  ██▓ ▒█████   ██▓███ ",
+		r"  ▒██▀ ▀█  ▓██▒▀█▀ ██▒▒██▀ ██▌▓██ ▒ ██▒▒████▄    ▒██▀ ██▌▓██▒▒██▒  ██▒▓██░  ██▒",
+		r"  ▒▓█    ▄ ▓██    ▓██░░██   █▌▓██ ░▄█ ▒▒██  ▀█▄  ░██   █▌▒██▒▒██░  ██▒▓██░ ██▓▒",
+		r"  ▒▓▓▄ ▄██▒▒██    ▒██ ░▓█▄   ▌▒██▀▀█▄  ░██▄▄▄▄██ ░▓█▄   ▌░██░▒██   ██░▒██▄█▓▒ ▒",
+		r"  ▒ ▓███▀ ░▒██▒   ░██▒░▒████▓ ░██▓ ▒██▒ ▓█   ▓██▒░▒████▓ ░██░░ ████▓▒░▒██▒ ░  ░",
+	],
+	[
+		r"   ╔═╗╔╦╗╔╦╗╦═╗╔═╗╔╦╗╦╔═╗╔═╗╦ ╦   ┌─┐┌─┐┬ ┬┌─┐┬─┐┌─┐┬ ┬┌─┐┬  ┬     ",
+		r"   ║  ║║║║║║╠╦╝╠═╣ ║║║║ ║╠═╝╚╦╝   ├─┘│ ││││├┤ ├┬┘└─┐├─┤├┤ │  │     ",
+		r"   ╚═╝╩ ╩╩ ╩╩╚═╩ ╩═╩╝╩╚═╝╩   ╩    ┴  └─┘└┴┘└─┘┴└─└─┘┴ ┴└─┘┴─┘┴─┘   ",
+		r"   ████████╗███████╗██████╗ ███╗   ███╗██╗███╗   ██╗ █████╗ ██╗      ",
+		r"   ╚══██╔══╝██╔════╝██╔══██╗████╗ ████║██║████╗  ██║██╔══██╗██║  PS> ",
+	],
+]
+
+
+def _normalize_logo(lines: List[str], width: int = LOGO_WIDTH, height: int = LOGO_HEIGHT) -> List[str]:
+	"""Normaliza tamaño del logo para evitar romper layout en OSD."""
+	res: List[str] = []
+	for line_text in lines[:height]:
+		if len(line_text) > width:
+			res.append(line_text[:width])
+		else:
+			res.append(line_text.ljust(width))
+	while len(res) < height:
+		res.append(" " * width)
+	return res
+
+
+def build_random_logo() -> List[str]:
+	"""Selecciona un logo aleatorio manteniendo dimensiones fijas."""
+	if not LOGO_VARIANTS:
+		return _normalize_logo([])
+	selected = random.choice(LOGO_VARIANTS)
+	return _normalize_logo(selected)
+
+
+def refresh_osd_logo() -> None:
+	"""Regenera el logo de la OSD para la siguiente reproducción."""
+	global OSD_LOGO_LINES
+	OSD_LOGO_LINES = build_random_logo()
+
+
+MENU_LOGO_LINES = _normalize_logo([
 	"                       ______            ___       ______  __   ",
 	r"  _________ ___  ____/ / __ \____ _____/ (_)___  / __ \ \/ /   ",
 	r" / ___/ __ `__ \/ __  / /_/ / __ `/ __  / / __ \/ /_/ /\  /    ",
 	"/ /__/ / / / / / /_/ / _, _/ /_/ / /_/ / / /_/ / ____/ / /     ",
 	r"\___/_/ /_/ /_/\__,_/_/ |_|\__,_/\__,_/_/\____/_/     /_/      ",
-]
+])
+OSD_LOGO_LINES = build_random_logo()
 
 def print_ascii_logo() -> None:
 	# Logo ASCII art centrado
 	w = term_width()
-	max_logo_width = max(len(line) for line in OSD_LOGO_LINES)
+	max_logo_width = max(len(line) for line in MENU_LOGO_LINES)
 	pad_left = max(0, (w - max_logo_width) // 2)
-	for line in OSD_LOGO_LINES:
+	for line in MENU_LOGO_LINES:
 		print(" " * pad_left + c(line, Colors.CYAN))
 	print()
 
