@@ -10,6 +10,14 @@ Reproductor de radio online, principalmente se nutre de datos de listas .M3U, pe
 
 Escucha radio internacionales o temáticas, todo ello desde tu terminal, consumiendo menos de 15 Megas de memoria RAM.
 
+## Novedades 1.2.0
+
+- OSD rediseñada y más limpia: sin logo ASCII superior, mejor distribución de bloques y controles en varias líneas.
+- "Ahora suena" y buffer mejorados: el buffer usa `cache-buffering-state` de mpv y se muestra debajo del título de canción.
+- Acciones directas en OSD: añadir/quitar favorito (`F`), marcar emisora como no reproducible (`B`) y salto al siguiente canal (`N`).
+- Volumen persistente: al usar `+/-` en OSD se guarda automáticamente en `config.json` para próximas reproducciones.
+- Consumo en tiempo real: nueva línea con uso aproximado de CPU y RAM del proceso (`KB/MB` según corresponda).
+
 ## Requisitos
 
 - mpv instalado y accesible en PATH
@@ -96,6 +104,7 @@ La interfaz puede mostrar iconos visuales (emojis/Unicode) para mejorar la exper
 - Historial: `l` reproducir último canal, `c` limpiar historial completo, `r` aleatorio
 - Aleatorio: se omiten emisoras en `blacklist` y si falla la reproducción se prueba otra automáticamente (hasta 3 intentos)
 - OSD propia (si está activada): tecla/botón `N` para “Siguiente canal”; en modos aleatorios salta directamente a otra emisora sin contar como fallo.
+- OSD propia: muestra consumo aproximado de la app en tiempo real (`CPU %` y `RAM MB`) para visualizar el uso durante la reproducción.
 - Control de errores de emisoras: tras 3 fallos acumulados de conexión inicial, una emisora se marca como no reproducible y se omite en selección/aleatorio.
 - Revisión de no reproducibles: desde Configuración puedes listar emisoras marcadas, desmarcar una o desmarcar todas.
 - La interfaz usa colores ANSI; en Windows se habilitan automáticamente si `colorama` está instalado.

@@ -6,7 +6,7 @@ import shutil
 import json
 import time
 from datetime import datetime
-from typing import List, Dict, Optional
+from typing import Any, List, Dict, Optional
 
 try:
 	from charstyle import Icon
@@ -256,6 +256,21 @@ def save_config() -> None:
 		pass
 
 
+def apply_runtime_preferences_from_config() -> None:
+	"""Aplica a variables globales las preferencias leídas en CONFIG."""
+	global CURRENT_PAGE_SIZE, SORT_PLAYLISTS_ASC, SORT_CHANNELS_ASC
+	try:
+		ps = int(CONFIG.get('page_size') or 20)
+		if 5 <= ps <= 100:
+			CURRENT_PAGE_SIZE = ps
+	except Exception:
+		pass
+	sort_pl = (CONFIG.get('sort_playlists') or 'asc').lower()
+	SORT_PLAYLISTS_ASC = (sort_pl != 'desc')
+	sort_ch = (CONFIG.get('sort_channels') or 'asc').lower()
+	SORT_CHANNELS_ASC = (sort_ch != 'desc')
+
+
 def is_ui_comfortable() -> bool:
 	mode = (CONFIG.get('ui_spacing') or 'comfortable').lower()
 	return mode != 'compact'
@@ -417,6 +432,34 @@ def filter_not_blacklisted(items: List[Dict]) -> List[Dict]:
 		if not is_blacklisted(name, url) and not is_unplayable(url):
 			res.append(it)
 	return res
+
+
+def mark_station_unplayable(url: str, name: Optional[str], source: Optional[str]) -> bool:
+	"""Marca manualmente una emisora como no reproducible (bloqueada)."""
+	key = normalize_station_url(url)
+	if not key:
+		return False
+	stations = load_unplayable_stations()
+	entry = stations.get(key)
+	if not isinstance(entry, dict):
+		entry = {
+			'url': url,
+			'name': name or url,
+			'fail_count': UNPLAYABLE_THRESHOLD,
+			'blocked': True,
+			'last_source': source or '',
+			'last_fail_ts': 0,
+		}
+	entry['url'] = url or entry.get('url') or ''
+	entry['name'] = name or entry.get('name') or url
+	entry['last_source'] = source or entry.get('last_source') or ''
+	entry['last_fail_ts'] = int(time.time())
+	entry['fail_count'] = max(UNPLAYABLE_THRESHOLD, int(entry.get('fail_count') or 0))
+	entry['blocked'] = True
+	entry['manual_block'] = True
+	stations[key] = entry
+	save_unplayable_stations(stations)
+	return True
 
 
 def normalize_station_url(url: str) -> str:
@@ -770,6 +813,11 @@ def play_with_config(
 	play_mode: Optional[str] = None,
 	source: Optional[str] = None,
 ) -> int:
+	global CONFIG
+	# Recargar configuración al iniciar cada reproducción (útil al cambiar de emisora)
+	CONFIG = load_config()
+	apply_runtime_preferences_from_config()
+
 	if is_unplayable(url):
 		print(c("Esta emisora está marcada como no reproducible (3 fallos de conexión inicial).", Colors.YELLOW))
 		print(c("Revísala en Configuración > Revisar no reproducibles.", Colors.DIM))
@@ -2014,12 +2062,130 @@ def _format_time_hms(seconds: float) -> str:
 	return f"{m:02d}:{s:02d}"
 
 
-# Número de líneas que ocupa la OSD (logo 5 + blank + progreso + separador + modo + emisora + ahora suena + pausa + botones + espacios)
-OSD_LINE_COUNT = 19
-
 # Último estado mostrado en OSD (para no redibujar si no cambió)
 _osd_last_state: Optional[dict] = None
 _osd_cursor_hidden = False
+_osd_last_rendered_lines = 0
+_osd_status_message = ""
+_osd_status_until = 0.0
+_osd_cpu_last_wall = 0.0
+_osd_cpu_last_proc = 0.0
+_osd_cpu_last_percent = 0.0
+
+
+def _get_process_memory_bytes() -> int:
+	"""Retorna memoria del proceso actual en bytes (best effort, sin dependencias externas)."""
+	if os.name == 'nt':
+		try:
+			import ctypes
+			from ctypes import wintypes
+
+			class PROCESS_MEMORY_COUNTERS(ctypes.Structure):
+				_fields_ = [
+					("cb", wintypes.DWORD),
+					("PageFaultCount", wintypes.DWORD),
+					("PeakWorkingSetSize", ctypes.c_size_t),
+					("WorkingSetSize", ctypes.c_size_t),
+					("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+					("QuotaPagedPoolUsage", ctypes.c_size_t),
+					("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+					("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+					("PagefileUsage", ctypes.c_size_t),
+					("PeakPagefileUsage", ctypes.c_size_t),
+				]
+
+			counters = PROCESS_MEMORY_COUNTERS()
+			counters.cb = ctypes.sizeof(PROCESS_MEMORY_COUNTERS)
+			h_proc = ctypes.windll.kernel32.GetCurrentProcess()
+			ok = ctypes.windll.psapi.GetProcessMemoryInfo(
+				h_proc,
+				ctypes.byref(counters),
+				counters.cb,
+			)
+			if ok:
+				return int(counters.WorkingSetSize)
+		except Exception:
+			pass
+	else:
+		try:
+			import resource
+			rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+			if sys.platform == 'darwin':
+				return int(rss)
+			return int(rss * 1024)
+		except Exception:
+			pass
+	return 0
+
+
+def _format_memory_usage(bytes_value: int) -> str:
+	"""Formatea bytes de memoria en KB/MB para evitar valores 0 MB."""
+	if bytes_value <= 0:
+		return "0 KB"
+	mb = bytes_value / (1024 * 1024)
+	if mb >= 1.0:
+		return f"{mb:.2f} MB"
+	kb = bytes_value / 1024
+	return f"{kb:.0f} KB"
+
+
+def _osd_sample_resource_usage() -> Dict[str, Any]:
+	"""Muestra uso aproximado de CPU (%) y RAM (MB) del proceso de cmdRadioPy."""
+	global _osd_cpu_last_wall, _osd_cpu_last_proc, _osd_cpu_last_percent
+	now_wall = time.time()
+	now_proc = time.process_time()
+	cpu_percent = _osd_cpu_last_percent
+	if _osd_cpu_last_wall > 0 and now_wall > _osd_cpu_last_wall:
+		d_wall = now_wall - _osd_cpu_last_wall
+		d_proc = max(0.0, now_proc - _osd_cpu_last_proc)
+		if d_wall > 0:
+			cpu_percent = max(0.0, (d_proc / d_wall) * 100.0)
+	_osd_cpu_last_wall = now_wall
+	_osd_cpu_last_proc = now_proc
+	_osd_cpu_last_percent = cpu_percent
+	memory_bytes = _get_process_memory_bytes()
+	return {
+		"cpu_percent": round(cpu_percent, 1),
+		"memory_bytes": memory_bytes,
+		"memory_text": _format_memory_usage(memory_bytes),
+	}
+
+
+def _osd_set_status_message(message: str, duration_sec: float = 2.5) -> None:
+	"""Muestra un mensaje temporal en la OSD."""
+	global _osd_status_message, _osd_status_until
+	_osd_status_message = message or ""
+	_osd_status_until = time.time() + max(0.5, float(duration_sec))
+
+
+def _osd_get_status_message() -> str:
+	"""Retorna el mensaje temporal activo, si existe."""
+	global _osd_status_message, _osd_status_until
+	if not _osd_status_message:
+		return ""
+	if time.time() >= _osd_status_until:
+		_osd_status_message = ""
+		_osd_status_until = 0.0
+		return ""
+	return _osd_status_message
+
+
+def _persist_osd_volume(state: dict) -> bool:
+	"""Guarda el volumen actual de OSD en config.json para próximas reproducciones."""
+	global CONFIG
+	vol = state.get("volume")
+	if not isinstance(vol, (int, float)):
+		return False
+	new_vol = max(0, min(130, int(vol)))
+	try:
+		current = int(CONFIG.get("volume") or 40)
+	except Exception:
+		current = 40
+	if current == new_vol:
+		return False
+	CONFIG["volume"] = new_vol
+	save_config()
+	return True
 
 
 def _osd_hide_cursor() -> None:
@@ -2050,8 +2216,15 @@ def _osd_show_cursor() -> None:
 
 def _osd_reset_state() -> None:
 	"""Resetea el estado de OSD para la siguiente reproducción."""
-	global _osd_last_state
+	global _osd_last_state, _osd_last_rendered_lines, _osd_status_message, _osd_status_until
+	global _osd_cpu_last_wall, _osd_cpu_last_proc, _osd_cpu_last_percent
 	_osd_last_state = None
+	_osd_last_rendered_lines = 0
+	_osd_status_message = ""
+	_osd_status_until = 0.0
+	_osd_cpu_last_wall = 0.0
+	_osd_cpu_last_proc = 0.0
+	_osd_cpu_last_percent = 0.0
 
 
 def _is_favorite(channel_url: str) -> bool:
@@ -2078,12 +2251,14 @@ def _toggle_favorite(channel_url: str, station_name: Optional[str]) -> bool:
 		return True
 
 
-def _osd_display_state(state: dict) -> dict:
+def _osd_display_state(state: dict, usage: Optional[Dict[str, Any]] = None) -> dict:
 	"""Estado reducido para comparación: evita parpadeo redibujando solo cuando cambia."""
+	usage = usage or {}
 	return {
 		"play_mode": (state.get("play_mode") or "").strip(),
 		"station_name": (state.get("station_name") or "").strip(),
 		"media_title": (state.get("media_title") or "").strip(),
+		"buffer_percent": state.get("buffer_percent"),
 		"channel_url": (state.get("channel_url") or "").strip(),
 		"source": (state.get("source") or "").strip(),
 		"pause": bool(state.get("pause")),
@@ -2094,17 +2269,20 @@ def _osd_display_state(state: dict) -> dict:
 		"audio_codec": state.get("audio_codec"),
 		"audio_bitrate_kbps": state.get("audio_bitrate_kbps"),
 		"samplerate_hz": state.get("samplerate_hz"),
+		"cpu_percent": usage.get("cpu_percent", 0.0),
+		"memory_bytes": usage.get("memory_bytes", 0),
+		"status_message": _osd_get_status_message(),
 	}
 
 
 def draw_custom_osd(state: dict, first_time: bool, key: Optional[str] = None) -> None:
 	"""
-	Dibuja la OSD propia: logo ASCII, barra de progreso, emisora/título y botones.
+	Dibuja la OSD propia: barra de progreso, emisora/título y botones.
 	state: volume, mute, pause, media_title, time_pos, duration, station_name, play_mode, channel_url, source.
-	key: tecla especial (ej. 'f' para toggle favorito).
+	key: tecla especial (ej. 'f' favorito, 'b' banear).
 	"""
 	import sys
-	global _osd_last_state
+	global _osd_last_state, _osd_last_rendered_lines
 	
 	# Si se presionó 'f', toggle favorito
 	if key == "f" and state.get("channel_url"):
@@ -2112,8 +2290,31 @@ def draw_custom_osd(state: dict, first_time: bool, key: Optional[str] = None) ->
 			_toggle_favorite(state.get("channel_url"), state.get("station_name"))
 		except Exception:
 			pass
+
+	if key == "b" and state.get("channel_url"):
+		try:
+			ok = mark_station_unplayable(
+				state.get("channel_url") or "",
+				state.get("station_name"),
+				state.get("source"),
+			)
+			if ok:
+				_osd_set_status_message("🚫 Emisora marcada como no reproducible")
+			else:
+				_osd_set_status_message("⚠ No se pudo marcar la emisora")
+		except Exception:
+			_osd_set_status_message("⚠ Error al marcar emisora")
+			pass
+
+	if key in ("+", "-"):
+		try:
+			if _persist_osd_volume(state):
+				_osd_set_status_message(f"🔊 Volumen guardado: {int(state.get('volume') or 0)}")
+		except Exception:
+			pass
 	
-	display = _osd_display_state(state)
+	usage = _osd_sample_resource_usage()
+	display = _osd_display_state(state, usage)
 	skipped = not first_time and _osd_last_state is not None and display == _osd_last_state
 	if skipped:
 		return
@@ -2124,35 +2325,37 @@ def draw_custom_osd(state: dict, first_time: bool, key: Optional[str] = None) ->
 		sys.stdout.flush()
 
 	w = term_width()
-	pad_logo = 0
+	pretty_icons = {
+		"mode": Icons.get_icon("CONFIG") or "⚙️",
+		"station": Icons.get_icon("RADIO") or "📻",
+		"source": Icons.get_icon("PLAYLIST") or "📋",
+		"now": Icons.get_icon("MUSIC") or "♪",
+		"status": Icons.get_icon("INFO") or "ℹ️",
+		"controls": Icons.get_icon("PLAY") or "▶",
+		"buffer": Icons.get_icon("STATS") or "📊",
+		"usage": Icons.get_icon("STATS") or "📊",
+		"favorite": Icons.get_icon("FAVORITE") or "⭐",
+		"next": Icons.get_icon("ARROW_RIGHT") or "→",
+		"exit": Icons.get_icon("EXIT") or "🚪",
+	}
+	section_icons = {
+		"mode": f"{pretty_icons['mode']}",
+		"station": f"{pretty_icons['station']}",
+		"source": f"{pretty_icons['source']}",
+		"now": f"{pretty_icons['now']}",
+		"status": f"{pretty_icons['status']}",
+		"controls": f"{pretty_icons['controls']}",
+	}
 
 	# Líneas a imprimir (sin ANSI de color en el conteo para cursor up)
 	lines_out: List[str] = []
-	for line in OSD_LOGO_LINES:
-		lines_out.append(" " * pad_logo + c(line, Colors.CYAN))
-	lines_out.append("")
-
-	# Barra de progreso y tiempo
-	time_pos = state.get("time_pos") or 0.0
-	duration = state.get("duration")
-	if duration is not None and duration > 0:
-		total = int(duration)
-		pos = int(time_pos)
-		bar = draw_osd_progress_bar(pos, total, width=min(40, w - 25))
-		time_str = f"  {_format_time_hms(time_pos)} / {_format_time_hms(duration)}"
-		lines_out.append(c(bar + time_str, Colors.BLUE))
-	else:
-		# En directo: tiempo transcurrido + barra indeterminada
-		elapsed = _format_time_hms(time_pos)
-		indet = "─" * (min(20, w // 3)) + "  En directo"
-		lines_out.append(c(f"  {elapsed}  ", Colors.DIM) + c(indet, Colors.BLUE))
 
 	lines_out.append(c("─" * w, Colors.DIM))
 	lines_out.append("")
 
 	# Modo de reproducción
 	mode = (state.get("play_mode") or "").strip() or "Normal"
-	mode_line = "  Modo: " + mode
+	mode_line = f"  {section_icons['mode']} Modo: " + mode
 	lines_out.append(c(mode_line[:w], Colors.GREEN))
 	lines_out.append("")
 
@@ -2162,43 +2365,82 @@ def draw_custom_osd(state: dict, first_time: bool, key: Optional[str] = None) ->
 	source = (state.get("source") or "").strip()
 	is_fav = _is_favorite(channel_url) if channel_url else False
 	fav_icon = "⭐" if is_fav else "☆"
-	station_line = f"  {fav_icon} " + (station or "Reproduciendo")
+	station_line = f"  {section_icons['station']} {fav_icon} " + (station or "Reproduciendo")
 	lines_out.append(c(station_line[:w], Colors.WHITE))
 	source_line = ""
 	if source and source.lower().endswith((".m3u", ".m3u8")):
-		source_line = f"  M3U: {source}"
+		source_line = f"  {section_icons['source']} M3U: {source}"
 	lines_out.append(c(source_line[:w], Colors.DIM) if source_line else "")
 	lines_out.append("")
 
 	# Ahora suena: título de la pista (media-title o metadata/icy-title en radio)
 	title = (state.get("media_title") or "").strip()
-	now_line = "  Ahora suena: " + (title[:w - 18] if title else "—")
-	lines_out.append(c(now_line[:w], Colors.MAGENTA))
+	now_line = f"  {section_icons['now']} Ahora suena: " + (title[:w - 22] if title else "—")
+	lines_out.append(c(now_line[:w], Colors.WHITE))
+	lines_out.append("")
+	buffer_percent = state.get("buffer_percent")
+	if isinstance(buffer_percent, (int, float)):
+		bp = max(0, min(100, int(buffer_percent)))
+		bar_width = max(12, min(40, w - 20))
+		buffer_bar = draw_osd_progress_bar(bp, 100, width=bar_width)
+		buffer_line = f"  {pretty_icons['buffer']} Buffer: {buffer_bar} {bp}%"
+		if bp < 30:
+			buffer_color = Colors.RED
+		elif bp < 70:
+			buffer_color = Colors.YELLOW
+		else:
+			buffer_color = Colors.GREEN
+	else:
+		buffer_line = f"  {pretty_icons['buffer']} Buffer: sin datos"
+		buffer_color = Colors.DIM
+	lines_out.append(c(buffer_line[:w], buffer_color))
+	lines_out.append("")
+	usage_line = (
+		f"  {pretty_icons['usage']} Consumo app: "
+		f"CPU {usage.get('cpu_percent', 0.0):.1f}%  "
+		f"RAM {usage.get('memory_text', '0 KB')}"
+	)
+	lines_out.append(c(usage_line[:w], Colors.CYAN))
 	lines_out.append("")
 
 	# Estado pausa: [ PAUSADO ] o línea en blanco
 	vol = state.get("volume") or 0
 	mute = state.get("mute") or False
 	pause = state.get("pause") or False
-	pause_line = "  [ PAUSADO ]" if pause else "  "
+	pause_line = f"  {section_icons['status']} [ PAUSADO ]" if pause else "  "
 	lines_out.append(c(pause_line[:w], Colors.GREEN if pause else Colors.DIM))
 	lines_out.append("")
 
 	# Botones y estado (iconos ▶/⏸, 🔇/🔈)
 	play_icon = getattr(Icon, "PAUSE", "⏸") if pause else getattr(Icon, "PLAY", "▶")
 	mute_icon = "🔇" if mute else "🔈"
-	p_btn = c(f"{play_icon} Pausa", Colors.GREEN if pause else Colors.WHITE)
-	m_btn = c(f"{mute_icon} Mute", Colors.GREEN if mute else Colors.WHITE)
-	n_btn = c("[N] Siguiente", Colors.CYAN)
-	q_btn = c("[Q] Salir", Colors.MAGENTA)
-	btns = f"  {p_btn}  [+] Vol+  [-] Vol-  {m_btn}  Vol:{vol}  [F] Fav  {n_btn}  {q_btn}"
-	lines_out.append(c(btns[:w], Colors.YELLOW))
+	btns_line_1 = (
+		c(f"  {section_icons['controls']} ", Colors.DIM)
+		+ c(f"[P] {play_icon} Pausa", Colors.CYAN)
+		+ c("  [+] Vol+", Colors.GREEN)
+		+ c("  [-] Vol-", Colors.YELLOW)
+		+ c(f"  [M] {mute_icon} Mute", Colors.MAGENTA)
+		+ c(f"  Vol:{vol}", Colors.WHITE)
+	)
+	btns_line_2 = (
+		c(f"  {section_icons['controls']} ", Colors.DIM)
+		+ c(f"[F] {pretty_icons['favorite']} Fav", Colors.YELLOW)
+		+ c("  [B] 🚫 Ban", Colors.RED)
+		+ c(f"  [N] {pretty_icons['next']} Siguiente", Colors.CYAN)
+		+ c(f"  [Q] {pretty_icons['exit']} Salir", Colors.MAGENTA)
+	)
+	lines_out.append(btns_line_1)
+	lines_out.append(btns_line_2)
+	status_message = _osd_get_status_message()
+	if status_message:
+		lines_out.append(c(f"  {status_message}"[:w], Colors.CYAN))
 
-	if not first_time:
-		sys.stdout.write("\033[%dA" % OSD_LINE_COUNT)  # Cursor up
+	if not first_time and _osd_last_rendered_lines > 0:
+		sys.stdout.write("\033[%dA" % _osd_last_rendered_lines)  # Cursor up dinámico
 	for line in lines_out:
 		sys.stdout.write(line + "\033[K\n")
 	sys.stdout.flush()
+	_osd_last_rendered_lines = len(lines_out)
 
 # --- Exportar/Importar configuración completa ---
 
@@ -3692,17 +3934,7 @@ def download_playlists_menu() -> None:
 def main() -> int:
 	global SORT_PLAYLISTS_ASC, CONFIG, CURRENT_PAGE_SIZE, SORT_CHANNELS_ASC
 	CONFIG = load_config()
-	# Aplicar preferencias del archivo de config
-	try:
-		ps = int(CONFIG.get('page_size') or 20)
-		if 5 <= ps <= 100:
-			CURRENT_PAGE_SIZE = ps
-	except Exception:
-		pass
-	sort_pl = (CONFIG.get('sort_playlists') or 'asc').lower()
-	SORT_PLAYLISTS_ASC = (sort_pl != 'desc')
-	sort_ch = (CONFIG.get('sort_channels') or 'asc').lower()
-	SORT_CHANNELS_ASC = (sort_ch != 'desc')
+	apply_runtime_preferences_from_config()
 
 	enable_colors_on_windows()
 	header(f"Menú principal - {APP_NAME} v{APP_VERSION}")
