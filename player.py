@@ -453,6 +453,9 @@ def play_url_with_custom_osd(
 					state = _gather_mpv_state(conn, station_name, play_mode, url, source)
 					vol = state.get("volume", 0)
 					_ipc_show_text(conn, ass_color_bold(f"Vol: {vol}%", 0, 255, 0), 1500)
+					if draw_osd_cb:
+						draw_osd_cb(state, first_draw, key="+")
+						first_draw = False
 				elif k == "-":
 					try:
 						_ipc_send(conn, {"command": ["add", "volume", -5]})
@@ -462,6 +465,9 @@ def play_url_with_custom_osd(
 					state = _gather_mpv_state(conn, station_name, play_mode, url, source)
 					vol = state.get("volume", 0)
 					_ipc_show_text(conn, ass_color_bold(f"Vol: {vol}%", 0, 255, 0), 1500)
+					if draw_osd_cb:
+						draw_osd_cb(state, first_draw, key="-")
+						first_draw = False
 				elif k == "m":
 					try:
 						_ipc_send(conn, {"command": ["cycle", "mute"]})
@@ -478,6 +484,12 @@ def play_url_with_custom_osd(
 					if draw_osd_cb:
 						state = _gather_mpv_state(conn, station_name, play_mode, url, source)
 						draw_osd_cb(state, first_draw, key="f")
+						first_draw = False
+				elif k == "b":
+					# Tecla 'b' para banear emisora actual (se maneja en draw_osd_cb con key param)
+					if draw_osd_cb:
+						state = _gather_mpv_state(conn, station_name, play_mode, url, source)
+						draw_osd_cb(state, first_draw, key="b")
 						first_draw = False
 			if draw_osd_cb:
 				state = _gather_mpv_state(conn, station_name, play_mode, url, source)
@@ -508,7 +520,7 @@ def _gather_mpv_state(
 	channel_url: Optional[str] = None,
 	source: Optional[str] = None,
 ) -> Dict[str, Any]:
-	"""Recoge volumen, mute, pause, media-title, time-pos, duration y opcionalmente codec/bitrate desde mpv IPC."""
+	"""Recoge estado de reproducción y metadatos (incluye estado de buffer) desde mpv IPC."""
 	state: Dict[str, Any] = {
 		"volume": 0,
 		"mute": False,
@@ -516,6 +528,7 @@ def _gather_mpv_state(
 		"media_title": "",
 		"time_pos": 0.0,
 		"duration": None,
+		"buffer_percent": None,
 		"station_name": station_name or "",
 		"play_mode": play_mode or "",
 		"channel_url": channel_url or "",
@@ -543,6 +556,13 @@ def _gather_mpv_state(
 		state["time_pos"] = float(tp) if tp is not None else 0.0
 		d = _ipc_get_property(conn, "duration")
 		state["duration"] = float(d) if d is not None else None
+	except Exception:
+		pass
+	try:
+		# Estado de buffer (%). En streams suele reflejar cuánto hay en caché.
+		buf = _ipc_get_property(conn, "cache-buffering-state")
+		if isinstance(buf, (int, float)):
+			state["buffer_percent"] = max(0, min(100, int(buf)))
 	except Exception:
 		pass
 	try:
