@@ -2014,9 +2014,6 @@ def _format_time_hms(seconds: float) -> str:
 	return f"{m:02d}:{s:02d}"
 
 
-# Número de líneas que ocupa la OSD (logo 5 + blank + progreso + separador + modo + emisora + ahora suena + pausa + botones + espacios)
-OSD_LINE_COUNT = 19
-
 # Último estado mostrado en OSD (para no redibujar si no cambió)
 _osd_last_state: Optional[dict] = None
 _osd_cursor_hidden = False
@@ -2099,7 +2096,7 @@ def _osd_display_state(state: dict) -> dict:
 
 def draw_custom_osd(state: dict, first_time: bool, key: Optional[str] = None) -> None:
 	"""
-	Dibuja la OSD propia: logo ASCII, barra de progreso, emisora/título y botones.
+	Dibuja la OSD propia con marco ASCII: línea superior, borde y contenido funcional.
 	state: volume, mute, pause, media_title, time_pos, duration, station_name, play_mode, channel_url, source.
 	key: tecla especial (ej. 'f' para toggle favorito).
 	"""
@@ -2124,37 +2121,28 @@ def draw_custom_osd(state: dict, first_time: bool, key: Optional[str] = None) ->
 		sys.stdout.flush()
 
 	w = term_width()
-	pad_logo = 0
+	# Ancho interior del marco (descontando bordes laterales "| " y " |")
+	inner_w = max(40, w - 4)
+	
+	# Construir contenido interno primero
+	inner_lines: List[str] = []
 
-	# Líneas a imprimir (sin ANSI de color en el conteo para cursor up)
-	lines_out: List[str] = []
-	for line in OSD_LOGO_LINES:
-		lines_out.append(" " * pad_logo + c(line, Colors.CYAN))
-	lines_out.append("")
-
-	# Barra de progreso y tiempo
+	# Barra de buffer de datos con icono
 	time_pos = state.get("time_pos") or 0.0
 	duration = state.get("duration")
 	if duration is not None and duration > 0:
 		total = int(duration)
 		pos = int(time_pos)
-		bar = draw_osd_progress_bar(pos, total, width=min(40, w - 25))
-		time_str = f"  {_format_time_hms(time_pos)} / {_format_time_hms(duration)}"
-		lines_out.append(c(bar + time_str, Colors.BLUE))
+		bar = draw_osd_progress_bar(pos, total, width=min(40, inner_w - 8))
+		time_str = f"Buffer: {_format_time_hms(time_pos)} / {_format_time_hms(duration)}"
+		inner_lines.append(c("⏱  ", Colors.CYAN) + c(bar + " " + time_str, Colors.BLUE))
 	else:
 		# En directo: tiempo transcurrido + barra indeterminada
 		elapsed = _format_time_hms(time_pos)
-		indet = "─" * (min(20, w // 3)) + "  En directo"
-		lines_out.append(c(f"  {elapsed}  ", Colors.DIM) + c(indet, Colors.BLUE))
+		indet = "─" * (min(20, inner_w // 3)) + " En directo"
+		inner_lines.append(c("🔴  ", Colors.RED) + c(f"Buffer: {elapsed}  ", Colors.DIM) + c(indet, Colors.BLUE))
 
-	lines_out.append(c("─" * w, Colors.DIM))
-	lines_out.append("")
-
-	# Modo de reproducción
-	mode = (state.get("play_mode") or "").strip() or "Normal"
-	mode_line = "  Modo: " + mode
-	lines_out.append(c(mode_line[:w], Colors.GREEN))
-	lines_out.append("")
+	inner_lines.append(c("─" * inner_w, Colors.DIM))
 
 	# Emisora (solo nombre) + indicador de favorito
 	station = (state.get("station_name") or "").strip()
@@ -2162,42 +2150,91 @@ def draw_custom_osd(state: dict, first_time: bool, key: Optional[str] = None) ->
 	source = (state.get("source") or "").strip()
 	is_fav = _is_favorite(channel_url) if channel_url else False
 	fav_icon = "⭐" if is_fav else "☆"
-	station_line = f"  {fav_icon} " + (station or "Reproduciendo")
-	lines_out.append(c(station_line[:w], Colors.WHITE))
+	station_line = f"📻  {fav_icon}  " + (station or "Reproduciendo")
+	inner_lines.append(c(station_line[:inner_w], Colors.WHITE))
 	source_line = ""
 	if source and source.lower().endswith((".m3u", ".m3u8")):
-		source_line = f"  M3U: {source}"
-	lines_out.append(c(source_line[:w], Colors.DIM) if source_line else "")
-	lines_out.append("")
+		source_line = f"🗂  M3U: {source}"
+	inner_lines.append(c(source_line[:inner_w], Colors.DIM) if source_line else "")
 
 	# Ahora suena: título de la pista (media-title o metadata/icy-title en radio)
 	title = (state.get("media_title") or "").strip()
-	now_line = "  Ahora suena: " + (title[:w - 18] if title else "—")
-	lines_out.append(c(now_line[:w], Colors.MAGENTA))
-	lines_out.append("")
+	now_line = "🎵  " + (title[:inner_w - 4] if title else "—")
+	inner_lines.append(c(now_line[:inner_w], Colors.MAGENTA))
 
-	# Estado pausa: [ PAUSADO ] o línea en blanco
+	# Estado compacto: modo, volumen, mute y pausa
+	mode = (state.get("play_mode") or "").strip() or "Normal"
 	vol = state.get("volume") or 0
 	mute = state.get("mute") or False
 	pause = state.get("pause") or False
-	pause_line = "  [ PAUSADO ]" if pause else "  "
-	lines_out.append(c(pause_line[:w], Colors.GREEN if pause else Colors.DIM))
-	lines_out.append("")
+	mute_icon = "🔇  " if mute else "🔊  "
+	state_line = f"▶  {mode}  {mute_icon}Vol:{vol}%"
+	inner_lines.append(c(state_line[:inner_w], Colors.GREEN))
+	if pause:
+		inner_lines.append(c("⏸  [ PAUSADO]", Colors.YELLOW))
+
+	# Información técnica de audio (si está disponible)
+	audio_codec = state.get("audio_codec")
+	audio_bitrate = state.get("audio_bitrate_kbps")
+	samplerate_hz = state.get("samplerate_hz")
+	tech_parts: List[str] = []
+	if audio_codec:
+		tech_parts.append(str(audio_codec).upper())
+	if isinstance(audio_bitrate, (int, float)) and audio_bitrate > 0:
+		tech_parts.append(f"{int(audio_bitrate)} kbps")
+	if isinstance(samplerate_hz, (int, float)) and samplerate_hz > 0:
+		tech_parts.append(f"{(float(samplerate_hz) / 1000.0):.1f} kHz")
+	if tech_parts:
+		tech_line = "🎧  " + " | ".join(tech_parts)
+		inner_lines.append(c(tech_line[:inner_w], Colors.DIM))
+
+	inner_lines.append(c("─" * inner_w, Colors.DIM))
 
 	# Botones y estado (iconos ▶/⏸, 🔇/🔈)
 	play_icon = getattr(Icon, "PAUSE", "⏸") if pause else getattr(Icon, "PLAY", "▶")
-	mute_icon = "🔇" if mute else "🔈"
-	p_btn = c(f"{play_icon} Pausa", Colors.GREEN if pause else Colors.WHITE)
-	m_btn = c(f"{mute_icon} Mute", Colors.GREEN if mute else Colors.WHITE)
-	n_btn = c("[N] Siguiente", Colors.CYAN)
-	q_btn = c("[Q] Salir", Colors.MAGENTA)
-	btns = f"  {p_btn}  [+] Vol+  [-] Vol-  {m_btn}  Vol:{vol}  [F] Fav  {n_btn}  {q_btn}"
-	lines_out.append(c(btns[:w], Colors.YELLOW))
+	p_btn = f"[Space] {play_icon}"
+	m_btn = f"[M] {mute_icon}"
+	n_btn = "[N] Next"
+	q_btn = "[Q] Quit"
+	btns = f"{p_btn}  [+/-] Vol  {m_btn}  [F] Fav  {n_btn}  {q_btn}"
+	inner_lines.append(c(btns[:inner_w], Colors.CYAN))
 
-	if not first_time:
-		sys.stdout.write("\033[%dA" % OSD_LINE_COUNT)  # Cursor up
+	# Construir salida final: línea superior + marco ASCII
+	lines_out: List[str] = []
+	
+	# Línea superior horizontal completa
+	lines_out.append(c("─" * w, Colors.DIM))
+	
+	# Borde superior del marco
+	box_width = inner_w + 2  # +2 por los espacios de padding
+	lines_out.append(c("+" + "─" * box_width + "+", Colors.DIM))
+	
+	# Contenido con bordes laterales
+	for line in inner_lines:
+		# Rellenar espacios si la línea es más corta que inner_w
+		# (usar longitud visual sin códigos ANSI para padding correcto)
+		visible_len = strip_ansi_len(line)
+		padding_needed = inner_w - visible_len
+		if padding_needed > 0:
+			padded_line = line + " " * padding_needed
+		else:
+			padded_line = line
+		lines_out.append(c("| ", Colors.DIM) + padded_line + c(" |", Colors.DIM))
+	
+	# Borde inferior del marco
+	lines_out.append(c("+" + "─" * box_width + "+", Colors.DIM))
+
+	if first_time:
+		# Primera vez: guardar posición del cursor
+		sys.stdout.write("\033[s")  # Save cursor position
+	else:
+		# Restaurar posición guardada
+		sys.stdout.write("\033[u")  # Restore cursor position
+	
+	# Escribir todas las líneas
 	for line in lines_out:
 		sys.stdout.write(line + "\033[K\n")
+	
 	sys.stdout.flush()
 
 # --- Exportar/Importar configuración completa ---
