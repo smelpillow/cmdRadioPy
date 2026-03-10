@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cmdradiopy"
+dynamic = ["version"]
+description = "Reproductor de radio en terminal con soporte M3U y OSD propia"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+  { name = "cmdRadioPy contributors" }
+]
+dependencies = [
+  "charstyle>=1.0.0",
+  "colorama>=0.4.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/smelpillow/cmdRadiopy"
+Repository = "https://github.com/smelpillow/cmdRadiopy"
+
+[project.scripts]
+cmdradiopy = "main:main"
+
+[tool.setuptools]
+py-modules = ["main", "player", "m3u_parser", "version"]
+
+[tool.setuptools.dynamic]
+version = { attr = "version.APP_VERSION" }

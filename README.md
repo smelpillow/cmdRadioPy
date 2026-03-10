@@ -34,9 +34,24 @@ Escucha radio internacionales o temáticas, todo ello desde tu terminal, consumi
 pip install -r requirements.txt
 ```
 
+### Instalación como aplicación (recomendado)
+
+```bash
+pipx install cmdradiopy
+```
+
+Luego ejecútalo con:
+
+```bash
+cmdradiopy
+```
+
 ## Uso rápido
 
-1. Coloca tus listas M3U/M3U8 en la carpeta `playlists/` (puedes añadir muchas, se soporta paginación)
+1. Coloca tus listas M3U/M3U8 en el directorio de datos del usuario:
+  - **Windows**: `%APPDATA%\cmdRadioPy\playlists\`
+  - **Linux/Mac**: `~/.config/cmdRadioPy/playlists/`
+  - Si vienes de versiones anteriores, la app migra automáticamente listas desde `playlists/` del proyecto al primer arranque.
 2. Ejecuta:
 
 ```bash
@@ -214,13 +229,16 @@ Ejemplo:
 - `m3u_parser.py`: parser de playlists `.m3u/.m3u8`
 - `player.py`: integración con `mpv` en modo audio (sin vídeo)
 - `version.py`: versión central de la app (`APP_VERSION`) y metadatos de versionado
-- `playlists/`: tus listas M3U/M3U8 (dentro del proyecto)
+- `playlists/`: carpeta histórica del proyecto (las nuevas instalaciones usan el directorio de usuario)
+- `pyproject.toml`: metadatos de empaquetado Python (base para `pipx`/PyPI)
+- `packaging/`: plantillas iniciales para Scoop, Chocolatey y Debian/apt
 
 ### Archivos de usuario (directorio de datos)
 Los siguientes archivos se guardan automáticamente en el directorio de datos del usuario:
 - **Windows**: `%APPDATA%\cmdRadioPy\`
 - **Linux/Mac**: `~/.config/cmdRadioPy/`
   - `config.json`: configuración de red, reintentos, densidad UI, volumen, temporizador, blacklist, validación de URLs, iconos, búsqueda e historial
+  - `playlists/`: listas M3U/M3U8 locales del usuario (lectura y descargas)
   - `favorites.json`: favoritos persistentes
   - `history.json`: historial de reproducciones (con limpieza automática opcional)
   - `search_history.json`: historial de búsquedas para sugerencias

@@ -55,7 +55,7 @@ from version import (
 
 
 BASE_DIR = os.path.dirname(__file__)
-PLAYLISTS_DIR = os.path.join(BASE_DIR, 'playlists')
+BUNDLED_PLAYLISTS_DIR = os.path.join(BASE_DIR, 'playlists')
 
 # Directorio de datos del usuario
 def get_user_data_dir() -> str:
@@ -71,6 +71,7 @@ def get_user_data_dir() -> str:
 	return data_dir
 
 USER_DATA_DIR = get_user_data_dir()
+PLAYLISTS_DIR = os.path.join(USER_DATA_DIR, 'playlists')
 FAVORITES_FILE = os.path.join(USER_DATA_DIR, 'favorites.json')
 HISTORY_FILE = os.path.join(USER_DATA_DIR, 'history.json')
 CONFIG_FILE = os.path.join(USER_DATA_DIR, 'config.json')
@@ -216,6 +217,29 @@ def prompt_yes_no(message: str, default_yes: bool = True) -> Optional[bool]:
 def ensure_playlists_dir() -> None:
 	if not os.path.isdir(PLAYLISTS_DIR):
 		os.makedirs(PLAYLISTS_DIR, exist_ok=True)
+	_migrate_playlists_from_bundled_if_needed()
+
+
+def _migrate_playlists_from_bundled_if_needed() -> None:
+	"""Migra playlists iniciales desde la carpeta del proyecto al directorio de usuario."""
+	if not os.path.isdir(BUNDLED_PLAYLISTS_DIR):
+		return
+	try:
+		user_items = [
+			f for f in os.listdir(PLAYLISTS_DIR)
+			if f.lower().endswith(('.m3u', '.m3u8')) and os.path.isfile(os.path.join(PLAYLISTS_DIR, f))
+		]
+		if user_items:
+			return
+		for filename in os.listdir(BUNDLED_PLAYLISTS_DIR):
+			if not filename.lower().endswith(('.m3u', '.m3u8')):
+				continue
+			src = os.path.join(BUNDLED_PLAYLISTS_DIR, filename)
+			dst = os.path.join(PLAYLISTS_DIR, filename)
+			if os.path.isfile(src) and not os.path.exists(dst):
+				shutil.copy2(src, dst)
+	except Exception:
+		pass
 
 
 def load_config() -> Dict[str, Optional[str]]:
