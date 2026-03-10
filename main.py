@@ -54,8 +54,33 @@ from version import (
 )
 
 
-BASE_DIR = os.path.dirname(__file__)
-BUNDLED_PLAYLISTS_DIR = os.path.join(BASE_DIR, 'playlists')
+def get_runtime_base_dirs() -> List[str]:
+	"""Retorna directorios base candidatos para recursos empaquetados."""
+	candidates: List[str] = []
+	if getattr(sys, 'frozen', False):
+		meipass_dir = getattr(sys, '_MEIPASS', None)
+		if meipass_dir:
+			candidates.append(os.path.abspath(meipass_dir))
+		executable_dir = os.path.dirname(sys.executable)
+		if executable_dir:
+			candidates.append(os.path.abspath(executable_dir))
+	module_dir = os.path.abspath(os.path.dirname(__file__))
+	candidates.append(module_dir)
+	return list(dict.fromkeys(candidates))
+
+
+def get_bundled_playlists_dir() -> str:
+	"""Localiza la carpeta de playlists incluida en source o binario."""
+	base_dirs = get_runtime_base_dirs()
+	for base_dir in base_dirs:
+		candidate = os.path.join(base_dir, 'playlists')
+		if os.path.isdir(candidate):
+			return candidate
+	return os.path.join(base_dirs[-1], 'playlists')
+
+
+BASE_DIR = get_runtime_base_dirs()[-1]
+BUNDLED_PLAYLISTS_DIR = get_bundled_playlists_dir()
 
 # Directorio de datos del usuario
 def get_user_data_dir() -> str:
@@ -78,6 +103,15 @@ CONFIG_FILE = os.path.join(USER_DATA_DIR, 'config.json')
 SEARCH_HISTORY_FILE = os.path.join(USER_DATA_DIR, 'search_history.json')
 UNPLAYABLE_STATIONS_FILE = os.path.join(USER_DATA_DIR, 'unplayable_stations.json')
 UNPLAYABLE_THRESHOLD = 3
+
+
+def should_print_version(argv: Optional[List[str]] = None) -> bool:
+	args = argv if argv is not None else sys.argv[1:]
+	return any(arg in ('--version', '-v') for arg in args)
+
+
+def print_version() -> None:
+	print(f"{APP_NAME} {APP_VERSION}")
 
 # Estado de configuración (editable en tiempo de ejecución)
 CURRENT_PAGE_SIZE = 20
@@ -2301,23 +2335,22 @@ def _osd_display_state(state: dict, usage: Optional[Dict[str, Any]] = None) -> d
 
 def draw_custom_osd(state: dict, first_time: bool, key: Optional[str] = None) -> None:
 	"""
-<<<<<<< HEAD
-	Dibuja la OSD propia con marco ASCII: línea superior, borde y contenido funcional.
-=======
-	Dibuja la OSD propia: barra de progreso, emisora/título y botones.
->>>>>>> e71ab63337db3d12d5f74adfad6f22fbc2c0e57a
+	Dibuja la OSD propia: buffer, emisora, estado, datos técnicos y controles.
 	state: volume, mute, pause, media_title, time_pos, duration, station_name, play_mode, channel_url, source.
 	key: tecla especial (ej. 'f' favorito, 'b' banear).
 	"""
 	import sys
 	global _osd_last_state, _osd_last_rendered_lines
-	
-	# Si se presionó 'f', toggle favorito
+
 	if key == "f" and state.get("channel_url"):
 		try:
-			_toggle_favorite(state.get("channel_url"), state.get("station_name"))
+			added = _toggle_favorite(state.get("channel_url"), state.get("station_name"))
+			if added:
+				_osd_set_status_message("⭐ Emisora añadida a favoritos")
+			else:
+				_osd_set_status_message("☆ Emisora eliminada de favoritos")
 		except Exception:
-			pass
+			_osd_set_status_message("⚠ No se pudo actualizar favoritos")
 
 	if key == "b" and state.get("channel_url"):
 		try:
@@ -2332,7 +2365,6 @@ def draw_custom_osd(state: dict, first_time: bool, key: Optional[str] = None) ->
 				_osd_set_status_message("⚠ No se pudo marcar la emisora")
 		except Exception:
 			_osd_set_status_message("⚠ Error al marcar emisora")
-			pass
 
 	if key in ("+", "-"):
 		try:
@@ -2340,11 +2372,10 @@ def draw_custom_osd(state: dict, first_time: bool, key: Optional[str] = None) ->
 				_osd_set_status_message(f"🔊 Volumen guardado: {int(state.get('volume') or 0)}")
 		except Exception:
 			pass
-	
+
 	usage = _osd_sample_resource_usage()
 	display = _osd_display_state(state, usage)
-	skipped = not first_time and _osd_last_state is not None and display == _osd_last_state
-	if skipped:
+	if not first_time and _osd_last_state is not None and display == _osd_last_state:
 		return
 	_osd_last_state = display
 
@@ -2353,30 +2384,6 @@ def draw_custom_osd(state: dict, first_time: bool, key: Optional[str] = None) ->
 		sys.stdout.flush()
 
 	w = term_width()
-<<<<<<< HEAD
-	# Ancho interior del marco (descontando bordes laterales "| " y " |")
-	inner_w = max(40, w - 4)
-	
-	# Construir contenido interno primero
-	inner_lines: List[str] = []
-
-	# Barra de buffer de datos con icono
-	time_pos = state.get("time_pos") or 0.0
-	duration = state.get("duration")
-	if duration is not None and duration > 0:
-		total = int(duration)
-		pos = int(time_pos)
-		bar = draw_osd_progress_bar(pos, total, width=min(40, inner_w - 8))
-		time_str = f"Buffer: {_format_time_hms(time_pos)} / {_format_time_hms(duration)}"
-		inner_lines.append(c("⏱  ", Colors.CYAN) + c(bar + " " + time_str, Colors.BLUE))
-	else:
-		# En directo: tiempo transcurrido + barra indeterminada
-		elapsed = _format_time_hms(time_pos)
-		indet = "─" * (min(20, inner_w // 3)) + " En directo"
-		inner_lines.append(c("🔴  ", Colors.RED) + c(f"Buffer: {elapsed}  ", Colors.DIM) + c(indet, Colors.BLUE))
-
-	inner_lines.append(c("─" * inner_w, Colors.DIM))
-=======
 	pretty_icons = {
 		"mode": Icons.get_icon("CONFIG") or "⚙️",
 		"station": Icons.get_icon("RADIO") or "📻",
@@ -2389,67 +2396,43 @@ def draw_custom_osd(state: dict, first_time: bool, key: Optional[str] = None) ->
 		"favorite": Icons.get_icon("FAVORITE") or "⭐",
 		"next": Icons.get_icon("ARROW_RIGHT") or "→",
 		"exit": Icons.get_icon("EXIT") or "🚪",
+		"audio": "🎧",
 	}
-	section_icons = {
-		"mode": f"{pretty_icons['mode']}",
-		"station": f"{pretty_icons['station']}",
-		"source": f"{pretty_icons['source']}",
-		"now": f"{pretty_icons['now']}",
-		"status": f"{pretty_icons['status']}",
-		"controls": f"{pretty_icons['controls']}",
-	}
+	lines_out: List[str] = [c("─" * w, Colors.DIM), ""]
 
-	# Líneas a imprimir (sin ANSI de color en el conteo para cursor up)
-	lines_out: List[str] = []
-
-	lines_out.append(c("─" * w, Colors.DIM))
-	lines_out.append("")
-
-	# Modo de reproducción
 	mode = (state.get("play_mode") or "").strip() or "Normal"
-	mode_line = f"  {section_icons['mode']} Modo: " + mode
-	lines_out.append(c(mode_line[:w], Colors.GREEN))
-	lines_out.append("")
->>>>>>> e71ab63337db3d12d5f74adfad6f22fbc2c0e57a
-
-	# Emisora (solo nombre) + indicador de favorito
-	station = (state.get("station_name") or "").strip()
-	channel_url = state.get("channel_url") or ""
+	station = (state.get("station_name") or "").strip() or "Reproduciendo"
+	channel_url = (state.get("channel_url") or "").strip()
 	source = (state.get("source") or "").strip()
+	title = (state.get("media_title") or "").strip() or "—"
+	vol = int(state.get("volume") or 0)
+	mute = bool(state.get("mute") or False)
+	pause = bool(state.get("pause") or False)
 	is_fav = _is_favorite(channel_url) if channel_url else False
 	fav_icon = "⭐" if is_fav else "☆"
-<<<<<<< HEAD
-	station_line = f"📻  {fav_icon}  " + (station or "Reproduciendo")
-	inner_lines.append(c(station_line[:inner_w], Colors.WHITE))
-	source_line = ""
-	if source and source.lower().endswith((".m3u", ".m3u8")):
-		source_line = f"🗂  M3U: {source}"
-	inner_lines.append(c(source_line[:inner_w], Colors.DIM) if source_line else "")
 
-	# Ahora suena: título de la pista (media-title o metadata/icy-title en radio)
-	title = (state.get("media_title") or "").strip()
-	now_line = "🎵  " + (title[:inner_w - 4] if title else "—")
-	inner_lines.append(c(now_line[:inner_w], Colors.MAGENTA))
-=======
-	station_line = f"  {section_icons['station']} {fav_icon} " + (station or "Reproduciendo")
-	lines_out.append(c(station_line[:w], Colors.WHITE))
-	source_line = ""
+	lines_out.append(c(f"  {pretty_icons['mode']} Modo: {mode}"[:w], Colors.GREEN))
+	lines_out.append(c(f"  {pretty_icons['station']} {fav_icon} {station}"[:w], Colors.WHITE))
 	if source and source.lower().endswith((".m3u", ".m3u8")):
-		source_line = f"  {section_icons['source']} M3U: {source}"
-	lines_out.append(c(source_line[:w], Colors.DIM) if source_line else "")
+		lines_out.append(c(f"  {pretty_icons['source']} M3U: {source}"[:w], Colors.DIM))
+	lines_out.append(c(f"  {pretty_icons['now']} Ahora suena: {title}"[:w], Colors.MAGENTA))
 	lines_out.append("")
 
-	# Ahora suena: título de la pista (media-title o metadata/icy-title en radio)
-	title = (state.get("media_title") or "").strip()
-	now_line = f"  {section_icons['now']} Ahora suena: " + (title[:w - 22] if title else "—")
-	lines_out.append(c(now_line[:w], Colors.WHITE))
-	lines_out.append("")
+	time_pos = float(state.get("time_pos") or 0.0)
+	duration = state.get("duration")
 	buffer_percent = state.get("buffer_percent")
-	if isinstance(buffer_percent, (int, float)):
+	if isinstance(duration, (int, float)) and duration > 0:
+		total = max(1, int(duration))
+		pos = max(0, min(total, int(time_pos)))
+		bar_width = max(12, min(40, w - 30))
+		bar = draw_osd_progress_bar(pos, total, width=bar_width)
+		buffer_line = f"  {pretty_icons['buffer']} Buffer: {bar} {_format_time_hms(time_pos)} / {_format_time_hms(duration)}"
+		buffer_color = Colors.BLUE
+	elif isinstance(buffer_percent, (int, float)):
 		bp = max(0, min(100, int(buffer_percent)))
-		bar_width = max(12, min(40, w - 20))
-		buffer_bar = draw_osd_progress_bar(bp, 100, width=bar_width)
-		buffer_line = f"  {pretty_icons['buffer']} Buffer: {buffer_bar} {bp}%"
+		bar_width = max(12, min(40, w - 22))
+		bar = draw_osd_progress_bar(bp, 100, width=bar_width)
+		buffer_line = f"  {pretty_icons['buffer']} Buffer: {bar} {bp}%"
 		if bp < 30:
 			buffer_color = Colors.RED
 		elif bp < 70:
@@ -2457,32 +2440,17 @@ def draw_custom_osd(state: dict, first_time: bool, key: Optional[str] = None) ->
 		else:
 			buffer_color = Colors.GREEN
 	else:
-		buffer_line = f"  {pretty_icons['buffer']} Buffer: sin datos"
+		buffer_line = f"  🔴 Buffer: {_format_time_hms(time_pos)}  En directo"
 		buffer_color = Colors.DIM
 	lines_out.append(c(buffer_line[:w], buffer_color))
-	lines_out.append("")
+
 	usage_line = (
 		f"  {pretty_icons['usage']} Consumo app: "
 		f"CPU {usage.get('cpu_percent', 0.0):.1f}%  "
 		f"RAM {usage.get('memory_text', '0 KB')}"
 	)
 	lines_out.append(c(usage_line[:w], Colors.CYAN))
-	lines_out.append("")
->>>>>>> e71ab63337db3d12d5f74adfad6f22fbc2c0e57a
 
-	# Estado compacto: modo, volumen, mute y pausa
-	mode = (state.get("play_mode") or "").strip() or "Normal"
-	vol = state.get("volume") or 0
-	mute = state.get("mute") or False
-	pause = state.get("pause") or False
-<<<<<<< HEAD
-	mute_icon = "🔇  " if mute else "🔊  "
-	state_line = f"▶  {mode}  {mute_icon}Vol:{vol}%"
-	inner_lines.append(c(state_line[:inner_w], Colors.GREEN))
-	if pause:
-		inner_lines.append(c("⏸  [ PAUSADO]", Colors.YELLOW))
-
-	# Información técnica de audio (si está disponible)
 	audio_codec = state.get("audio_codec")
 	audio_bitrate = state.get("audio_bitrate_kbps")
 	samplerate_hz = state.get("samplerate_hz")
@@ -2494,88 +2462,33 @@ def draw_custom_osd(state: dict, first_time: bool, key: Optional[str] = None) ->
 	if isinstance(samplerate_hz, (int, float)) and samplerate_hz > 0:
 		tech_parts.append(f"{(float(samplerate_hz) / 1000.0):.1f} kHz")
 	if tech_parts:
-		tech_line = "🎧  " + " | ".join(tech_parts)
-		inner_lines.append(c(tech_line[:inner_w], Colors.DIM))
-
-	inner_lines.append(c("─" * inner_w, Colors.DIM))
-
-	# Botones y estado (iconos ▶/⏸, 🔇/🔈)
-	play_icon = getattr(Icon, "PAUSE", "⏸") if pause else getattr(Icon, "PLAY", "▶")
-	p_btn = f"[Space] {play_icon}"
-	m_btn = f"[M] {mute_icon}"
-	n_btn = "[N] Next"
-	q_btn = "[Q] Quit"
-	btns = f"{p_btn}  [+/-] Vol  {m_btn}  [F] Fav  {n_btn}  {q_btn}"
-	inner_lines.append(c(btns[:inner_w], Colors.CYAN))
-
-	# Construir salida final: línea superior + marco ASCII
-	lines_out: List[str] = []
-	
-	# Línea superior horizontal completa
-	lines_out.append(c("─" * w, Colors.DIM))
-	
-	# Borde superior del marco
-	box_width = inner_w + 2  # +2 por los espacios de padding
-	lines_out.append(c("+" + "─" * box_width + "+", Colors.DIM))
-	
-	# Contenido con bordes laterales
-	for line in inner_lines:
-		# Rellenar espacios si la línea es más corta que inner_w
-		# (usar longitud visual sin códigos ANSI para padding correcto)
-		visible_len = strip_ansi_len(line)
-		padding_needed = inner_w - visible_len
-		if padding_needed > 0:
-			padded_line = line + " " * padding_needed
-		else:
-			padded_line = line
-		lines_out.append(c("| ", Colors.DIM) + padded_line + c(" |", Colors.DIM))
-	
-	# Borde inferior del marco
-	lines_out.append(c("+" + "─" * box_width + "+", Colors.DIM))
-
-	if first_time:
-		# Primera vez: guardar posición del cursor
-		sys.stdout.write("\033[s")  # Save cursor position
-	else:
-		# Restaurar posición guardada
-		sys.stdout.write("\033[u")  # Restore cursor position
-	
-	# Escribir todas las líneas
-=======
-	pause_line = f"  {section_icons['status']} [ PAUSADO ]" if pause else "  "
-	lines_out.append(c(pause_line[:w], Colors.GREEN if pause else Colors.DIM))
+		lines_out.append(c(f"  {pretty_icons['audio']} Audio: {' | '.join(tech_parts)}"[:w], Colors.DIM))
 	lines_out.append("")
 
-	# Botones y estado (iconos ▶/⏸, 🔇/🔈)
+	mute_icon = "🔇" if mute else "🔊"
 	play_icon = getattr(Icon, "PAUSE", "⏸") if pause else getattr(Icon, "PLAY", "▶")
-	mute_icon = "🔇" if mute else "🔈"
-	btns_line_1 = (
-		c(f"  {section_icons['controls']} ", Colors.DIM)
-		+ c(f"[P] {play_icon} Pausa", Colors.CYAN)
-		+ c("  [+] Vol+", Colors.GREEN)
-		+ c("  [-] Vol-", Colors.YELLOW)
-		+ c(f"  [M] {mute_icon} Mute", Colors.MAGENTA)
-		+ c(f"  Vol:{vol}", Colors.WHITE)
+	state_text = f"  {pretty_icons['status']} Estado: {'PAUSADO' if pause else 'REPRODUCIENDO'}  {mute_icon} Vol:{vol}%"
+	lines_out.append(c(state_text[:w], Colors.YELLOW if pause else Colors.GREEN))
+	controls_line_1 = (
+		f"  {pretty_icons['controls']} [P] {play_icon} Pausa  [+] Vol+  [-] Vol-  [M] {mute_icon} Mute"
 	)
-	btns_line_2 = (
-		c(f"  {section_icons['controls']} ", Colors.DIM)
-		+ c(f"[F] {pretty_icons['favorite']} Fav", Colors.YELLOW)
-		+ c("  [B] 🚫 Ban", Colors.RED)
-		+ c(f"  [N] {pretty_icons['next']} Siguiente", Colors.CYAN)
-		+ c(f"  [Q] {pretty_icons['exit']} Salir", Colors.MAGENTA)
+	controls_line_2 = (
+		f"  {pretty_icons['controls']} [F] {pretty_icons['favorite']} Fav  [B] 🚫 Ban  "
+		f"[N] {pretty_icons['next']} Siguiente  [Q] {pretty_icons['exit']} Salir"
 	)
-	lines_out.append(btns_line_1)
-	lines_out.append(btns_line_2)
+	lines_out.append(c(controls_line_1[:w], Colors.CYAN))
+	lines_out.append(c(controls_line_2[:w], Colors.CYAN))
+
 	status_message = _osd_get_status_message()
 	if status_message:
+		lines_out.append("")
 		lines_out.append(c(f"  {status_message}"[:w], Colors.CYAN))
 
 	if not first_time and _osd_last_rendered_lines > 0:
-		sys.stdout.write("\033[%dA" % _osd_last_rendered_lines)  # Cursor up dinámico
->>>>>>> e71ab63337db3d12d5f74adfad6f22fbc2c0e57a
+		sys.stdout.write("\033[%dA" % _osd_last_rendered_lines)
 	for line in lines_out:
 		sys.stdout.write(line + "\033[K\n")
-	
+
 	sys.stdout.flush()
 	_osd_last_rendered_lines = len(lines_out)
 
@@ -4070,6 +3983,9 @@ def download_playlists_menu() -> None:
 
 def main() -> int:
 	global SORT_PLAYLISTS_ASC, CONFIG, CURRENT_PAGE_SIZE, SORT_CHANNELS_ASC
+	if should_print_version():
+		print_version()
+		return 0
 	CONFIG = load_config()
 	apply_runtime_preferences_from_config()
 
@@ -4265,9 +4181,6 @@ def main() -> int:
 
 
 if __name__ == '__main__':
-	if len(sys.argv) > 1 and sys.argv[1] in ('--version', '-v'):
-		print(f"{APP_NAME} {APP_VERSION}")
-		sys.exit(0)
 	try:
 		sys.exit(main())
 	except KeyboardInterrupt:

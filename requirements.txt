@@ -1,4 +1,5 @@
 # Dependencias opcionales para cmdRadioPy
+# Equivalente al extra "ui" definido en pyproject.toml
 
 # Para iconos en la interfaz (recomendado)
 charstyle>=1.0.0

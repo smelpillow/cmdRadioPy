@@ -1,0 +1,57 @@
+name: Release Windows
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ".[build-win]"
+
+      - name: Build win64 artifact
+        shell: pwsh
+        run: ./packaging/windows/build-win64.ps1 -PythonExe python
+
+      - name: Validate executable version
+        shell: pwsh
+        run: ./dist/cmdradiopy/cmdradiopy.exe --version
+
+      - name: Generate SHA256 file
+        id: sha
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash -Path ./dist/cmdradiopy-win64.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  cmdradiopy-win64.zip" | Out-File -FilePath ./dist/cmdradiopy-win64.sha256 -Encoding ascii -NoNewline
+          "value=$hash" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            dist/cmdradiopy-win64.zip
+            dist/cmdradiopy-win64.sha256
+          body: |
+            Windows build for `${{ github.ref_name }}`.
+
+            SHA256 (`cmdradiopy-win64.zip`): `${{ steps.sha.outputs.value }}`
+          draft: false
+          prerelease: false

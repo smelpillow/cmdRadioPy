@@ -1,10 +1,10 @@
 {
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "cmdRadioPy - terminal online radio player",
   "homepage": "https://github.com/smelpillow/cmdRadiopy",
-  "license": "UNKNOWN",
-  "url": "https://github.com/smelpillow/cmdRadiopy/releases/download/v1.2.0/cmdradiopy-win64.zip",
-  "hash": "REPLACE_WITH_SHA256",
+  "license": "GPL-3.0-only",
+  "url": "https://github.com/smelpillow/cmdRadiopy/releases/download/v1.2.1/cmdradiopy-win64.zip",
+  "hash": "fbf23651a4f9fadda0e2f37e122f50ecfc2ef70b6963da82a862c946c7538ac7",
   "extract_dir": "cmdradiopy",
   "bin": [
     "cmdradiopy.exe"
@@ -12,5 +12,5 @@
   "depends": [
     "mpv"
   ],
-  "notes": "Template inicial. Ajustar url/hash/bin tras definir artefacto final de release."
+  "notes": "Usa este manifiesto tras publicar el artefacto en GitHub Releases con la URL indicada."
 }

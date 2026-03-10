@@ -2,13 +2,16 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
   <metadata>
     <id>cmdradiopy</id>
-    <version>1.2.0</version>
+    <version>1.2.1</version>
     <title>cmdRadioPy</title>
     <authors>cmdRadioPy contributors</authors>
     <owners>cmdRadioPy contributors</owners>
+    <license type="expression">GPL-3.0-only</license>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>cmdRadioPy - terminal online radio player.</description>
     <projectUrl>https://github.com/smelpillow/cmdRadiopy</projectUrl>
+    <docsUrl>https://github.com/smelpillow/cmdRadiopy#readme</docsUrl>
+    <packageSourceUrl>https://github.com/smelpillow/cmdRadiopy</packageSourceUrl>
     <tags>radio terminal mpv python</tags>
   </metadata>
   <files>

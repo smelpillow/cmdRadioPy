@@ -1,14 +1,23 @@
 # cmdRadioPy
 
-                       ______            ___       ______  __   
-  _________ ___  ____/ / __ \____ _____/ (_)___  / __ \ \/ /   
- / ___/ __ `__ \/ __  / /_/ / __ `/ __  / / __ \/ /_/ /\  /    
-/ /__/ / / / / / /_/ / _, _/ /_/ / /_/ / / /_/ / ____/ / /     
-\___/_/ /_/ /_/\__,_/_/ |_|\__,_/\__,_/_/\____/_/     /_/      
+```text
+                       ______            ___       ______  __
+  _________ ___  ____/ / __ \____ _____/ (_)___  / __ \ \/ /
+ / ___/ __ `__ \/ __  / /_/ / __ `/ __  / / __ \/ /_/ /\  /
+/ /__/ / / / / / /_/ / _, _/ /_/ / /_/ / / /_/ / ____/ / /
+\___/_/ /_/ /_/\__,_/_/ |_|\__,_/\__,_/_/\____/_/     /_/
+```
 
 Reproductor de radio online, principalmente se nutre de datos de listas .M3U, pero permite búsqueda online, reproducción aleatoria y continua, gestión de favoritos, historial de últimas escuchas, estadísticas de uso, descarga de playlists desde GitHub y búsqueda en repositorios remotos.
 
 Escucha radio internacionales o temáticas, todo ello desde tu terminal, consumiendo menos de 15 Megas de memoria RAM.
+
+## Novedades 1.2.1
+
+- Empaquetado Windows automatizado por tag con GitHub Actions (`vX.Y.Z`).
+- Build reproducible de `cmdradiopy-win64.zip` con generación de SHA256.
+- Metadatos de packaging actualizados para GPL-3.0 (Scoop/Chocolatey/Debian).
+- Corrección de render del encabezado ASCII en GitHub.
 
 ## Novedades 1.2.0
 
@@ -27,6 +36,7 @@ Escucha radio internacionales o temáticas, todo ello desde tu terminal, consumi
 - Python 3.9+
 - (Recomendado) Para iconos en la interfaz: `pip install charstyle` (si no está instalado, se usarán caracteres Unicode básicos)
 - (Opcional) Para mejor soporte de colores en Windows: `pip install colorama`
+- Licencia del proyecto: GPL-3.0
 
 ### Instalación rápida de dependencias
 
@@ -37,7 +47,7 @@ pip install -r requirements.txt
 ### Instalación como aplicación (recomendado)
 
 ```bash
-pipx install cmdradiopy
+pipx install "cmdradiopy[ui]"
 ```
 
 Luego ejecútalo con:
@@ -232,6 +242,7 @@ Ejemplo:
 - `playlists/`: carpeta histórica del proyecto (las nuevas instalaciones usan el directorio de usuario)
 - `pyproject.toml`: metadatos de empaquetado Python (base para `pipx`/PyPI)
 - `packaging/`: plantillas iniciales para Scoop, Chocolatey y Debian/apt
+- `LICENSE`: licencia GPL-3.0 del proyecto
 
 ### Archivos de usuario (directorio de datos)
 Los siguientes archivos se guardan automáticamente en el directorio de datos del usuario:
@@ -248,3 +259,4 @@ Los siguientes archivos se guardan automáticamente en el directorio de datos de
 
 - Si `mpv` no está en PATH, el programa mostrará instrucciones de instalación.
 - El modo "aleatorio global" selecciona una playlist aleatoria y luego un canal aleatorio dentro (no uniformemente por número de canales).
+- El empaquetado Windows en curso usa un zip con `cmdradiopy.exe` y playlists iniciales incluidas en el artefacto de release.
