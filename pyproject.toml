@@ -28,7 +28,7 @@ Repository = "https://github.com/smelpillow/cmdRadiopy"
 
 [project.optional-dependencies]
 ui = [
-  "charstyle>=1.0.0",
+  "charstyle>=0.4.0",
   "colorama>=0.4.0"
 ]
 build-win = [
