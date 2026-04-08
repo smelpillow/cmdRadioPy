@@ -6,7 +6,7 @@ import shutil
 import json
 import time
 from datetime import datetime
-from typing import Any, List, Dict, Optional
+from typing import Any, List, Dict, Optional, Callable
 
 try:
 	from charstyle import Icon
@@ -397,7 +397,12 @@ def http_get_json(url: str, timeout: int = 8):
 		return None
 
 
-def http_download_file(url: str, dest_path: str, timeout: int = 30):
+def http_download_file(
+	url: str,
+	dest_path: str,
+	timeout: int = 30,
+	progress_cb: Optional[Callable[[int, Optional[int]], None]] = None,
+):
 	"""Descarga un archivo desde una URL y lo guarda en dest_path.
 	
 	Returns:
@@ -413,13 +418,30 @@ def http_download_file(url: str, dest_path: str, timeout: int = 30):
 			if hasattr(resp, 'status'):
 				if resp.status != 200:
 					return False, f"HTTP {resp.status}: {resp.reason}"
-			data = resp.read()
+			total_bytes: Optional[int] = None
+			try:
+				content_length = resp.headers.get('Content-Length') if hasattr(resp, 'headers') else None
+				if content_length:
+					total_bytes = int(content_length)
+			except (TypeError, ValueError):
+				total_bytes = None
 			# Asegurar que el directorio destino existe
 			dest_dir = os.path.dirname(dest_path)
 			if dest_dir:
 				os.makedirs(dest_dir, exist_ok=True)
+			downloaded = 0
+			chunk_size = 64 * 1024
 			with open(dest_path, 'wb') as f:
-				f.write(data)
+				while True:
+					chunk = resp.read(chunk_size)
+					if not chunk:
+						break
+					f.write(chunk)
+					downloaded += len(chunk)
+					if progress_cb:
+						progress_cb(downloaded, total_bytes)
+			if progress_cb:
+				progress_cb(downloaded, total_bytes)
 			return True, None
 	except urllib.error.HTTPError as e:
 		return False, f"HTTP {e.code}: {e.reason}"
@@ -1125,6 +1147,61 @@ def format_channel_metadata(channel: Dict) -> str:
 	return " | ".join(parts) if parts else "Sin metadatos"
 
 
+def format_channel_metadata_short(channel: Dict, max_parts: int = 2) -> str:
+	"""Resumen compacto de metadatos para listados."""
+	attrs = channel.get('attrs', {})
+	if not isinstance(attrs, dict):
+		return ''
+
+	parts: List[str] = []
+	bitrate = attrs.get('audio-bitrate') or attrs.get('bitrate')
+	if bitrate:
+		parts.append(f"{bitrate}kbps")
+	genre = attrs.get('group-title')
+	if genre:
+		parts.append(str(genre))
+	country = attrs.get('tvg-country') or attrs.get('country')
+	if country:
+		parts.append(str(country))
+	language = attrs.get('tvg-language') or attrs.get('language')
+	if language:
+		parts.append(str(language))
+
+	if not parts:
+		return ''
+	return ' · '.join(parts[:max_parts])
+
+
+def get_channel_search_text(channel: Dict) -> str:
+	"""Texto normalizado para búsqueda local por nombre, URL y metadatos."""
+	parts: List[str] = []
+	name = channel.get('name') or ''
+	url = channel.get('url') or ''
+	parts.append(str(name))
+	parts.append(str(url))
+
+	attrs = channel.get('attrs', {})
+	if isinstance(attrs, dict):
+		for val in attrs.values():
+			if val is None:
+				continue
+			parts.append(str(val))
+
+	return ' '.join(parts).lower()
+
+
+def build_channel_list_label(channel: Dict, include_source: Optional[str] = None) -> str:
+	"""Etiqueta de canal para listados con metadatos compactos."""
+	name = channel.get('name') or channel.get('url') or ''
+	short_meta = format_channel_metadata_short(channel)
+	parts = [str(name)]
+	if short_meta:
+		parts.append(dim(f"[{short_meta}]"))
+	if include_source:
+		parts.append(dim(f"[{include_source}]"))
+	return ' '.join(parts)
+
+
 def show_channel_preview(channel: Dict, source: Optional[str] = None) -> None:
 	"""Muestra una previsualización de información del canal antes de reproducir."""
 	name = channel.get('name') or channel.get('url') or 'Unknown'
@@ -1299,10 +1376,10 @@ def paginated_select(options: List[str], title: str, page_size: int = None, show
 def filter_channels(channels: List[Dict]) -> List[Dict]:
 	print()
 	header("Filtro de canales")
-	query = input(c("Texto a filtrar (enter para mostrar todo): ", Colors.CYAN)).strip().lower()
+	query = input(c("Texto a filtrar (nombre/url/metadatos, enter para mostrar todo): ", Colors.CYAN)).strip().lower()
 	if not query:
 		return channels
-	return [c_ for c_ in channels if query in (c_.get('name') or '').lower()]
+	return [c_ for c_ in channels if query in get_channel_search_text(c_)]
 
 
 def load_search_history() -> List[str]:
@@ -1733,7 +1810,7 @@ def global_search(playlists: List[str]) -> None:
 	
 	# Obtener sugerencias basadas en búsqueda vacía (mostrará recientes)
 	suggestions = get_search_suggestions("", search_history, favorites, play_history)
-	query = prompt_with_suggestions("Texto a buscar (en nombre/url) o número de sugerencia: ", suggestions, search_history)
+	query = prompt_with_suggestions("Texto a buscar (nombre/url/metadatos) o número de sugerencia: ", suggestions, search_history)
 	
 	if not query:
 		print(c("Búsqueda vacía.", Colors.YELLOW))
@@ -1778,8 +1855,8 @@ def global_search(playlists: List[str]) -> None:
 		for ch in channels:
 			name = (ch.get('name') or '')
 			url = (ch.get('url') or '')
-			if query in name.lower() or query in url.lower():
-				results.append({'name': name or url, 'url': url, 'source': pl})
+			if query in get_channel_search_text(ch):
+				results.append({'name': name or url, 'url': url, 'source': pl, 'attrs': ch.get('attrs', {})})
 	if not results:
 		print(c("Sin resultados.", Colors.YELLOW))
 		input(c("Pulsa enter para volver... ", Colors.CYAN))
@@ -1789,8 +1866,10 @@ def global_search(playlists: List[str]) -> None:
 		# Evitar comillas anidadas
 		labels = []
 		for r in results:
+			short_meta = format_channel_metadata_short({'attrs': r.get('attrs', {})})
+			meta_badge = f" {dim(f'[{short_meta}]')}" if short_meta else ''
 			badge = dim(f"[{r['source']}]")
-			labels.append(f"{r['name']} {badge}")
+			labels.append(f"{r['name']}{meta_badge} {badge}")
 		print()
 		header(f"Resultados ({len(results)})")
 		print(f"  {c('1.', Colors.YELLOW)} Aleatorio entre resultados (r)  |  {c('0.', Colors.YELLOW)} Volver (q)")
@@ -1885,14 +1964,14 @@ def select_and_play(channels: List[Dict], source: Optional[str] = None) -> None:
 	while True:
 		filtered = channels
 		if current_filter:
-			filtered = [c_ for c_ in channels if current_filter in (c_.get('name') or '').lower()]
+			filtered = [c_ for c_ in channels if current_filter in get_channel_search_text(c_)]
 		filtered = sorted(filtered, key=lambda ch: (ch.get('name') or ch.get('url') or '').lower(), reverse=not SORT_CHANNELS_ASC)
 		filtered = filter_not_blacklisted(filtered)
 		if not filtered:
 			print(c("No hay canales para mostrar.", Colors.RED))
 			return
 
-		options = [c_.get('name') or c_.get('url') for c_ in filtered]
+		options = [build_channel_list_label(c_) for c_ in filtered]
 		print()
 		header(f"Selección de canales ({len(filtered)} disponibles)")
 		print(f"  {c('1.', Colors.YELLOW)} Aleatorio entre resultados (r)  |  {c('2.', Colors.YELLOW)} Favorito por número (f)  |  {c('0.', Colors.YELLOW)} Volver (q)")
@@ -1953,7 +2032,7 @@ def select_and_play(channels: List[Dict], source: Optional[str] = None) -> None:
 				CONFIG['sort_channels'] = 'asc' if SORT_CHANNELS_ASC else 'desc'
 				save_config()
 				filtered = sorted(filtered, key=lambda ch: (ch.get('name') or ch.get('url') or '').lower(), reverse=not SORT_CHANNELS_ASC)
-				options = [c_.get('name') or c_.get('url') for c_ in filtered]
+				options = [build_channel_list_label(c_) for c_ in filtered]
 				continue
 			if idx1 == -3:
 				current_filter = input(c("Texto a filtrar: ", Colors.CYAN)).strip().lower()
@@ -3499,7 +3578,12 @@ def get_available_categories() -> List[tuple]:
 		return POPULAR_CATEGORIES
 
 
-def download_playlist_from_github(category: str, filename: str, display_name: str) -> bool:
+def download_playlist_from_github(
+	category: str,
+	filename: str,
+	display_name: str,
+	progress_prefix: str = '',
+) -> bool:
 	"""Descarga una playlist desde el repositorio de GitHub.
 	
 	Args:
@@ -3529,19 +3613,37 @@ def download_playlist_from_github(category: str, filename: str, display_name: st
 		if result is None or not result:
 			return False
 	
-	print(c(f"Descargando {display_name}...", Colors.CYAN), end='', flush=True)
-	
-	success, error_msg = http_download_file(url, dest_path, timeout=60)
+	progress_state = {
+		'last_draw': 0.0,
+		'last_text': '',
+	}
+
+	def _render_progress(downloaded: int, total: Optional[int]) -> None:
+		now = time.monotonic()
+		if now - progress_state['last_draw'] < 0.12 and total not in (None, 0) and downloaded < total:
+			return
+		downloaded_mb = downloaded / (1024 * 1024)
+		if total and total > 0:
+			total_mb = total / (1024 * 1024)
+			pct = (downloaded / total) * 100
+			text = f"{progress_prefix}Descargando {display_name}... {pct:5.1f}% ({downloaded_mb:.2f}/{total_mb:.2f} MB)"
+		else:
+			text = f"{progress_prefix}Descargando {display_name}... {downloaded_mb:.2f} MB"
+		progress_state['last_text'] = text
+		progress_state['last_draw'] = now
+		print(c(f"\r{text}", Colors.CYAN), end='', flush=True)
+
+	success, error_msg = http_download_file(url, dest_path, timeout=60, progress_cb=_render_progress)
 	if success:
 		# Verificar que el archivo se descargó correctamente
 		try:
 			channels = parse_m3u_file(dest_path)
 			check_icon = Icons.get_icon('CHECK')
-			print(c(f" {check_icon} ({len(channels)} emisoras)", Colors.GREEN))
+			print(c(f"\r{progress_prefix}Descargando {display_name}... {check_icon} ({len(channels)} emisoras)", Colors.GREEN))
 			return True
 		except Exception as e:
 			cross_icon = Icons.get_icon('CROSS')
-			print(c(f" {cross_icon}", Colors.RED))
+			print(c(f"\r{progress_prefix}Descargando {display_name}... {cross_icon}", Colors.RED))
 			print(c(f"Error: El archivo descargado no es válido: {e}", Colors.RED))
 			# Intentar eliminar el archivo corrupto
 			try:
@@ -3551,7 +3653,7 @@ def download_playlist_from_github(category: str, filename: str, display_name: st
 			return False
 	else:
 		cross_icon = Icons.get_icon('CROSS')
-		print(c(f" {cross_icon}", Colors.RED))
+		print(c(f"\r{progress_prefix}Descargando {display_name}... {cross_icon}", Colors.RED))
 		if error_msg:
 			print(c(f"Error: {error_msg}", Colors.RED))
 		else:
@@ -3898,8 +4000,8 @@ def download_multiple_categories(categories: List[tuple]) -> None:
 	
 	for i, (category_key, category_name) in enumerate(categories, 1):
 		filename = f"{category_key}.m3u"
-		print(c(f"[{i}/{total}] ", Colors.CYAN), end='', flush=True)
-		success = download_playlist_from_github("", filename, category_name)
+		prefix = f"[{i}/{total}] "
+		success = download_playlist_from_github("", filename, category_name, progress_prefix=prefix)
 		if success:
 			success_count += 1
 		else:

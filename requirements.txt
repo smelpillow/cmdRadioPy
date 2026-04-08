@@ -2,7 +2,7 @@
 # Equivalente al extra "ui" definido en pyproject.toml
 
 # Para iconos en la interfaz (recomendado)
-charstyle>=1.0.0
+charstyle>=0.4.0
 
 # Para mejor soporte de colores en Windows (opcional)
 colorama>=0.4.0
