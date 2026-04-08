@@ -300,6 +300,18 @@ def _read_key_with_timeout(timeout_sec: float) -> str:
 		return ""
 
 
+def _confirm_quit_playback(timeout_sec: float = 4.0) -> bool:
+	"""Pide confirmación para salir de la reproducción actual."""
+	try:
+		prompt = "\r¿Salir de la reproducción? Pulsa 'q' para confirmar (otra tecla cancela)... "
+		print(prompt, end='', flush=True)
+		confirm = _read_key_with_timeout(timeout_sec)
+		print("\r" + (" " * len(prompt)) + "\r", end='', flush=True)
+		return bool(confirm and confirm.lower() == 'q')
+	except Exception:
+		return False
+
+
 def play_url_with_custom_osd(
 	url: str,
 	station_name: Optional[str],
@@ -380,8 +392,10 @@ def play_url_with_custom_osd(
 			while proc.poll() is None:
 				key = _read_key_with_timeout(0.3)
 				if key and key.lower() == "q":
-					_send_cmd(proc, b"quit\n")
-					break
+					if _confirm_quit_playback():
+						_send_cmd(proc, b"quit\n")
+						break
+					continue
 				if key and key.lower() == "n":
 					_send_cmd(proc, b"quit\n")
 					try:
@@ -414,6 +428,8 @@ def play_url_with_custom_osd(
 			if key:
 				k = key.lower()
 				if k == "q":
+					if not _confirm_quit_playback():
+						continue
 					try:
 						_ipc_send(conn, {"command": ["quit"]})
 					except Exception:
@@ -611,6 +627,8 @@ def play_url_with_ui(name: str, url: str) -> int:
 				continue
 			k = key.lower()
 			if k == 'q':
+				if not _confirm_quit_playback():
+					continue
 				_send_cmd(proc, b"quit\n")
 				try:
 					proc.wait(timeout=5)
