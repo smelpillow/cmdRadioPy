@@ -104,7 +104,7 @@ def _ipc_server_path() -> str:
 	if os.name == 'nt':
 		return r"\\.\pipe\cmdradiopy-mpv"
 	xdg = os.environ.get("XDG_RUNTIME_DIR")
-	if xdg:
+	if xdg and os.path.isdir(xdg) and os.access(xdg, os.W_OK):
 		return os.path.join(xdg, "cmdradiopy-mpv.sock")
 	return "/tmp/cmdradiopy-mpv.sock"
 
@@ -348,6 +348,11 @@ def play_url_with_custom_osd(
 		args.extend(extra_args)
 	if not use_idle_then_load:
 		args.append(url)
+	if os.name != 'nt' and os.path.exists(ipc_path):
+		try:
+			os.remove(ipc_path)
+		except OSError:
+			pass
 
 	proc = subprocess.Popen(args, stdin=subprocess.PIPE)
 	conn = None
@@ -355,8 +360,8 @@ def play_url_with_custom_osd(
 	ipc_path = _ipc_server_path()
 
 	try:
-		# Esperar a que mpv cree el socket/pipe (streams pueden tardar más)
-		for attempt in range(40):
+		# Esperar a que mpv cree el socket/pipe (en Linux puede tardar más en crear el socket)
+		for attempt in range(100):
 			try:
 				time.sleep(0.25)
 			except KeyboardInterrupt:
@@ -382,11 +387,17 @@ def play_url_with_custom_osd(
 			try:
 				print("No se pudo conectar al IPC de mpv. Reproducción sin OSD (controles: p, +, -, m, n, q).")
 				print(f"Ruta IPC: {ipc_path}")
+				print(f"XDG_RUNTIME_DIR: {os.environ.get('XDG_RUNTIME_DIR', 'no definido')}")
+				print(f"Socket existente: {'sí' if os.path.exists(ipc_path) else 'no'}")
 			except Exception:
 				pass
 			if log_cb:
 				try:
-					log_cb(f"IPC no conectado. Ruta: {ipc_path}")
+					log_cb(
+						f"IPC no conectado. Ruta: {ipc_path}. "
+						f"XDG_RUNTIME_DIR={os.environ.get('XDG_RUNTIME_DIR', 'no definido')}. "
+						f"Socket existente={'si' if os.path.exists(ipc_path) else 'no'}"
+					)
 				except Exception:
 					pass
 			while proc.poll() is None:
