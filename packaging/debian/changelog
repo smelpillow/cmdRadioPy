@@ -1,19 +1,19 @@
-cmdradiopy (1.2.2-1) unstable; urgency=medium
+cmdradiopy (1.2.6) unstable; urgency=medium
 
-  * Bump version to 1.2.2.
+  * Bump version to 1.2.6.
   * Add Linux .deb packaging workflow.
   * Fix nested f-string SyntaxError in main.py.
 
  -- cmdRadioPy contributors <noreply@example.com>  Thu, 09 Apr 2026 12:00:00 +0000
 
-cmdradiopy (1.2.1-1) unstable; urgency=medium
+cmdradiopy (1.2.6) unstable; urgency=medium
 
-  * Bump version to 1.2.1.
+  * Bump version to 1.2.6.
   * Improve release packaging workflow and metadata.
 
  -- cmdRadioPy contributors <noreply@example.com>  Tue, 10 Mar 2026 20:55:00 +0000
 
-cmdradiopy (1.2.0-1) unstable; urgency=medium
+cmdradiopy (1.2.6) unstable; urgency=medium
 
   * Initial Debian packaging template.
 
