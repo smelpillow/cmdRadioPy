@@ -1,8 +1,8 @@
-cmdradiopy (1.2.6-1) unstable; urgency=medium
+cmdradiopy (1.2.7-1) unstable; urgency=medium
 
-  * Bump version to 1.2.6.
-  * Add and stabilize Linux .deb packaging workflow.
-  * Fix build dependencies for pyproject/PEP517 in CI.
+  * Bump version to 1.2.7.
+  * Fix Linux IPC handling for mpv OSD on Ubuntu.
+  * Prepare next Windows and Debian release artifacts.
 
  -- cmdRadioPy contributors <noreply@example.com>  Thu, 09 Apr 2026 12:00:00 +0000
 
