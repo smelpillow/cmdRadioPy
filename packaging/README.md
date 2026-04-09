@@ -5,9 +5,9 @@ Este directorio contiene plantillas y scripts de trabajo para distribución.
 ## Estado
 
 - `windows/`: scaffold inicial de build para generar `cmdradiopy.exe` + `cmdradiopy-win64.zip`.
-- `scoop/`: manifiesto actualizado a `v1.2.2` con URL/hash reales de release.
-- `chocolatey/`: nuspec + install script actualizados a `v1.2.2` con URL/hash reales de release.
-- `debian/`: empaquetado .deb listo para build — `control`, `changelog` (v1.2.2-1), `rules`, `copyright`, `source/format`.
+- `scoop/`: manifiesto actualizado a `v1.2.6` con URL/hash reales de release.
+- `chocolatey/`: nuspec + install script actualizados a `v1.2.6` con URL/hash reales de release.
+- `debian/`: empaquetado .deb listo para build — `control`, `changelog` (v1.2.6-1), `rules`, `copyright`, `source/format`.
 
 ## Decisiones actuales
 
@@ -18,7 +18,7 @@ Este directorio contiene plantillas y scripts de trabajo para distribución.
 
 ## Siguientes pasos
 
-1. Confirmar instalación en Scoop/Chocolatey usando la URL pública de `v1.2.2`.
+1. Confirmar instalación en Scoop/Chocolatey usando la URL pública de `v1.2.6`.
 2. Validar ejecución limpia con playlists migradas en una máquina sin estado previo.
 3. Actualizar Maintainer y email reales en `debian/control` y `debian/changelog` antes de publicar en repositorios oficiales.
 4. Validar el workflow Linux haciendo push del siguiente tag.
@@ -37,6 +37,9 @@ Este directorio contiene plantillas y scripts de trabajo para distribución.
 - Herramienta: `dpkg-buildpackage -us -uc -b` + `lintian` (no bloqueante)
 - Salidas: release assets `cmdradiopy_<version>_all.deb` y su `.sha256`
 
-## Hash actual (v1.2.2)
+## Release actual (v1.2.6)
 
-- `cmdradiopy-win64.zip`: `dd4f84fb17fac83d723a6fd337ded6b9f90d19ae6f0bf82d8b98f87ef06a2f22`
+- Enlace: https://github.com/smelpillow/cmdRadioPy/releases/tag/v1.2.6
+
+- `cmdradiopy-win64.zip`: `ff7785f39521902273120b4d5815dd1333f640bd46155cabe3e5b8611551f5e1`
+- Hash del `.deb` publicado en `v1.2.6`: `9aed05d565d827dc625e83e4e65c2c65d4cc0025a48b53b7de45d87c39d85d89`

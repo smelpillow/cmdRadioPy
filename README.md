@@ -12,17 +12,23 @@ Reproductor de radio online, principalmente se nutre de datos de listas .M3U, pe
 
 Escucha radio internacionales o temáticas, todo ello desde tu terminal, consumiendo menos de 15 Megas de memoria RAM.
 
-## Novedades 1.2.2
+## Novedades 1.2.6
 
-- Publicado release `v1.2.2` con artefactos `cmdradiopy-win64.zip` y `cmdradiopy-win64.sha256`.
-- Corrección de formato de cadenas en reproducción para evitar errores de sintaxis en CI/build.
-- Alineación de metadatos de versión en app y packaging (Scoop/Chocolatey).
+- Publicado release `v1.2.6` con artefactos para Windows y Linux (`.deb`) y sus `sha256`.
+- Pipeline Debian estabilizado (dependencias de build y soporte `pyproject` en `pybuild`).
+- Alineación de metadatos de versión en app y packaging.
 
 ## Descarga (Windows)
 
 - Release más reciente: https://github.com/smelpillow/cmdRadioPy/releases/latest
-- v1.2.2 (`cmdradiopy-win64.zip`): https://github.com/smelpillow/cmdRadioPy/releases/download/v1.2.2/cmdradiopy-win64.zip
-- SHA256 v1.2.2: https://github.com/smelpillow/cmdRadioPy/releases/download/v1.2.2/cmdradiopy-win64.sha256
+- Release v1.2.6: https://github.com/smelpillow/cmdRadioPy/releases/tag/v1.2.6
+- v1.2.6 (`cmdradiopy-win64.zip`): https://github.com/smelpillow/cmdRadioPy/releases/download/v1.2.6/cmdradiopy-win64.zip
+- SHA256 v1.2.6: https://github.com/smelpillow/cmdRadioPy/releases/download/v1.2.6/cmdradiopy-win64.sha256
+
+## Descarga (Linux)
+
+- Release v1.2.6 (assets Linux): https://github.com/smelpillow/cmdRadioPy/releases/tag/v1.2.6
+- Descarga el paquete `.deb` y su `.sha256` desde los assets de ese release.
 
 ## Novedades 1.2.1
 
