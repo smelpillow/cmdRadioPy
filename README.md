@@ -12,22 +12,24 @@ Reproductor de radio online, principalmente se nutre de datos de listas .M3U, pe
 
 Escucha radio internacionales o temáticas, todo ello desde tu terminal, consumiendo menos de 15 Megas de memoria RAM.
 
-## Próxima versión 1.2.7
+## Novedades 1.2.7
 
-- Corrección del versionado para que la app y el paquete Debian salgan como `1.2.7` / `1.2.7-1`.
+- Publicado release `v1.2.7` con artefactos Windows y Linux y sus archivos `sha256`.
+- Corregido el versionado Debian para generar `cmdradiopy_1.2.7-1_all.deb`.
 - Ajustes del IPC de `mpv` en Linux para estabilizar la OSD propia en Ubuntu.
-- Preparación de la siguiente release con artefactos Windows y Linux coherentes.
 
 ## Descarga (Windows)
 
 - Release más reciente: <https://github.com/smelpillow/cmdRadioPy/releases/latest>
-- Última release publicada: <https://github.com/smelpillow/cmdRadioPy/releases/tag/v1.2.6>
-- La próxima release objetivo es `v1.2.7`.
+- Release v1.2.7: <https://github.com/smelpillow/cmdRadioPy/releases/tag/v1.2.7>
+- `cmdradiopy-win64.zip`: <https://github.com/smelpillow/cmdRadioPy/releases/download/v1.2.7/cmdradiopy-win64.zip>
+- `cmdradiopy-win64.sha256`: <https://github.com/smelpillow/cmdRadioPy/releases/download/v1.2.7/cmdradiopy-win64.sha256>
 
 ## Descarga (Linux)
 
-- Última release publicada con assets Linux: <https://github.com/smelpillow/cmdRadioPy/releases/tag/v1.2.6>
-- El próximo paquete esperado es `cmdradiopy_1.2.7-1_all.deb`.
+- Release v1.2.7 (assets Linux): <https://github.com/smelpillow/cmdRadioPy/releases/tag/v1.2.7>
+- `cmdradiopy_1.2.7-1_all.deb`: <https://github.com/smelpillow/cmdRadioPy/releases/download/v1.2.7/cmdradiopy_1.2.7-1_all.deb>
+- `cmdradiopy_1.2.7-1_all.deb.sha256`: <https://github.com/smelpillow/cmdRadioPy/releases/download/v1.2.7/cmdradiopy_1.2.7-1_all.deb.sha256>
 
 ## Novedades 1.2.1
 

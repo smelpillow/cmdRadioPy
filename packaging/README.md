@@ -5,8 +5,8 @@ Este directorio contiene plantillas y scripts de trabajo para distribución.
 ## Estado
 
 - `windows/`: scaffold inicial de build para generar `cmdradiopy.exe` + `cmdradiopy-win64.zip`.
-- `scoop/`: manifiesto alineado con la última release publicada (`v1.2.6`); actualizar a `v1.2.7` tras publicar el nuevo hash.
-- `chocolatey/`: nuspec + install script alineados con la última release publicada (`v1.2.6`); actualizar a `v1.2.7` tras publicar el nuevo hash.
+- `scoop/`: manifiesto actualizado a `v1.2.7` con URL/hash reales de release.
+- `chocolatey/`: nuspec + install script actualizados a `v1.2.7` con URL/hash reales de release.
 - `debian/`: empaquetado .deb listo para build — `control`, `changelog` (v1.2.7-1), `rules`, `copyright`, `source/format`.
 
 ## Decisiones actuales
@@ -18,10 +18,10 @@ Este directorio contiene plantillas y scripts de trabajo para distribución.
 
 ## Siguientes pasos
 
-1. Publicar `v1.2.7` y actualizar Scoop/Chocolatey con la URL/hash definitivos del nuevo artefacto Windows.
+1. Confirmar instalación en Scoop/Chocolatey usando la URL pública de `v1.2.7`.
 2. Validar ejecución limpia con playlists migradas en una máquina sin estado previo.
 3. Actualizar Maintainer y email reales en `debian/control` y `debian/changelog` antes de publicar en repositorios oficiales.
-4. Validar ambos workflows haciendo push del tag `v1.2.7`.
+4. Validar ambos workflows en cada nuevo tag `vX.Y.Z`.
 
 ## CI/CD
 
@@ -41,8 +41,7 @@ Este directorio contiene plantillas y scripts de trabajo para distribución.
 
 ## Estado de release
 
-- Última release publicada: <https://github.com/smelpillow/cmdRadioPy/releases/tag/v1.2.6>
-- Próxima release objetivo: `v1.2.7`
+- Última release publicada: <https://github.com/smelpillow/cmdRadioPy/releases/tag/v1.2.7>
 
-- `cmdradiopy-win64.zip`: `ff7785f39521902273120b4d5815dd1333f640bd46155cabe3e5b8611551f5e1`
-- Hash del `.deb` publicado en `v1.2.6`: `9aed05d565d827dc625e83e4e65c2c65d4cc0025a48b53b7de45d87c39d85d89`
+- `cmdradiopy-win64.zip`: `7d6643dddacbb629ac4d04e9b0908763d0142cd04700bf0ec576b29b845da7c5`
+- `cmdradiopy_1.2.7-1_all.deb`: `623949545f7f6ab5b486c85aec94cff3770dc6d8464505fbb01565f6da22ab4f`
