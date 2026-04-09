@@ -18,6 +18,12 @@ Escucha radio internacionales o temáticas, todo ello desde tu terminal, consumi
 - Corrección de formato de cadenas en reproducción para evitar errores de sintaxis en CI/build.
 - Alineación de metadatos de versión en app y packaging (Scoop/Chocolatey).
 
+## Descarga (Windows)
+
+- Release más reciente: https://github.com/smelpillow/cmdRadioPy/releases/latest
+- v1.2.2 (`cmdradiopy-win64.zip`): https://github.com/smelpillow/cmdRadioPy/releases/download/v1.2.2/cmdradiopy-win64.zip
+- SHA256 v1.2.2: https://github.com/smelpillow/cmdRadioPy/releases/download/v1.2.2/cmdradiopy-win64.sha256
+
 ## Novedades 1.2.1
 
 - Empaquetado Windows automatizado por tag con GitHub Actions (`vX.Y.Z`).

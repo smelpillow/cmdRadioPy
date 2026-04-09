@@ -8,6 +8,6 @@ Rules-Requires-Root: no
 
 Package: cmdradiopy
 Architecture: all
-Depends: ${misc:Depends}, ${python3:Depends}, mpv
+Depends: ${misc:Depends}, ${python3:Depends}, mpv, python3-charstyle, python3-colorama
 Description: Terminal online radio player with M3U support
  cmdRadioPy is a lightweight CLI app for online radio playback using mpv.

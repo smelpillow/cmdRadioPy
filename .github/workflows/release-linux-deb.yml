@@ -1,0 +1,75 @@
+name: Release Linux deb
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release-deb:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            debhelper \
+            dh-python \
+            python3-all \
+            python3-setuptools \
+            python3-charstyle \
+            python3-colorama \
+            lintian
+
+      - name: Build .deb package
+        run: |
+          cp -r packaging/debian debian
+          dpkg-buildpackage -us -uc -b
+
+      - name: Inspect .deb metadata
+        run: dpkg-deb -I ../cmdradiopy_*.deb
+
+      - name: Smoke test — query installed package info
+        run: dpkg-deb --field ../cmdradiopy_*.deb Version
+
+      - name: Run lintian (non-blocking)
+        run: lintian ../cmdradiopy_*.deb || true
+
+      - name: Locate .deb artifact
+        id: deb
+        run: |
+          DEB_PATH=$(ls ../cmdradiopy_*.deb)
+          DEB_NAME=$(basename "$DEB_PATH")
+          HASH=$(sha256sum "$DEB_PATH" | awk '{ print $1 }')
+          echo "path=$DEB_PATH" >> "$GITHUB_OUTPUT"
+          echo "name=$DEB_NAME" >> "$GITHUB_OUTPUT"
+          echo "hash=$HASH" >> "$GITHUB_OUTPUT"
+          cp "$DEB_PATH" .
+
+      - name: Generate SHA256 file
+        run: |
+          echo "${{ steps.deb.outputs.hash }}  ${{ steps.deb.outputs.name }}" > "${{ steps.deb.outputs.name }}.sha256"
+
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            ${{ steps.deb.outputs.name }}
+            ${{ steps.deb.outputs.name }}.sha256
+          body: |
+            Linux .deb build for `${{ github.ref_name }}`.
+
+            SHA256 (`${{ steps.deb.outputs.name }}`): `${{ steps.deb.outputs.hash }}`
+          draft: false
+          prerelease: false
