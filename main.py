@@ -1886,7 +1886,7 @@ def global_search(playlists: List[str]) -> None:
 					print(c("No hay resultados reproducibles para aleatorio.", Colors.RED))
 					return
 				item = random.choice(pool)
-				print(f"{c('Reproduciendo (aleatorio):', Colors.GREEN)} {item['name']} {dim(f\"[{item['source']}]\")}")
+				print(f"{c('Reproduciendo (aleatorio):', Colors.GREEN)} {item['name']} {dim('[' + item['source'] + ']')}")
 				try:
 					code = play_with_config(
 						item['url'],
@@ -1919,7 +1919,7 @@ def global_search(playlists: List[str]) -> None:
 		if idx == 0 or idx == -1:
 			return
 		item = results[idx - 1]
-		print(f"{c('Reproduciendo:', Colors.GREEN)} {item['name']} {dim(f\"[{item['source']}]\")}")
+		print(f"{c('Reproduciendo:', Colors.GREEN)} {item['name']} {dim('[' + item['source'] + ']')}")
 		try:
 			code = play_with_config(
 				item['url'],
@@ -3923,7 +3923,7 @@ def remote_search_menu() -> None:
 					print(c("No hay resultados remotos reproducibles para aleatorio.", Colors.RED))
 					return
 				item = random.choice(pool)
-				print(f"{c('Reproduciendo (aleatorio remoto):', Colors.GREEN)} {item['name']} {dim(f\"[{item['source']}]\")}")
+				print(f"{c('Reproduciendo (aleatorio remoto):', Colors.GREEN)} {item['name']} {dim('[' + item['source'] + ']')}")
 				try:
 					code = play_with_config(item['url'], item.get('name'), source=item.get('source'))
 				except MpvNotFoundError as e:
@@ -3973,7 +3973,7 @@ def remote_search_menu() -> None:
 		if idx == 0 or idx == -1:
 			return
 		item = results[idx - 1]
-		print(f"{c('Reproduciendo:', Colors.GREEN)} {item['name']} {dim(f\"[{item['source']}]\")}")
+		print(f"{c('Reproduciendo:', Colors.GREEN)} {item['name']} {dim('[' + item['source'] + ']')}")
 		try:
 			code = play_with_config(item['url'], item.get('name'), source=item.get('source'))
 		except MpvNotFoundError as e:
