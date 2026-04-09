@@ -31,6 +31,55 @@ Escucha radio internacionales o temáticas, todo ello desde tu terminal, consumi
 - `cmdradiopy_1.2.7-1_all.deb`: <https://github.com/smelpillow/cmdRadioPy/releases/download/v1.2.7/cmdradiopy_1.2.7-1_all.deb>
 - `cmdradiopy_1.2.7-1_all.deb.sha256`: <https://github.com/smelpillow/cmdRadioPy/releases/download/v1.2.7/cmdradiopy_1.2.7-1_all.deb.sha256>
 
+## Instalacion de paquetes
+
+### Windows (`cmdradiopy-win64.zip`)
+
+1. Descarga `cmdradiopy-win64.zip` desde la release.
+2. Descomprime el zip en una carpeta local, por ejemplo `C:\Apps\cmdradiopy`.
+3. Ejecuta `cmdradiopy.exe`.
+4. Asegurate de tener `mpv` instalado y en PATH.
+
+Opcional (PowerShell):
+
+```powershell
+choco install mpv
+```
+
+### Linux (`.deb`)
+
+1. Descarga `cmdradiopy_1.2.7-1_all.deb` desde la release.
+2. Instala el paquete con `apt`:
+
+```bash
+sudo apt install ./cmdradiopy_1.2.7-1_all.deb
+```
+
+3. Ejecuta:
+
+```bash
+cmdradiopy --version
+cmdradiopy
+```
+
+Si `apt` no resuelve dependencias en tu distro derivada:
+
+```bash
+sudo dpkg -i ./cmdradiopy_1.2.7-1_all.deb
+sudo apt-get -f install -y
+```
+
+## Playlists M3U en instalaciones empaquetadas
+
+Para usar la app necesitas disponer de listas `.m3u/.m3u8`.
+
+- Opcion 1: copiar tus listas manualmente en el directorio de usuario:
+  - Windows: `%APPDATA%\cmdRadioPy\playlists\`
+  - Linux/Mac: `~/.config/cmdRadioPy/playlists/`
+- Opcion 2: descargarlas desde la propia app (menu principal, opcion `10`) o desde el repositorio remoto soportado por la aplicacion.
+
+Nota: aunque algun artefacto de release puede incluir playlists iniciales, se recomienda mantener/actualizar tus listas en el directorio de usuario.
+
 ## Novedades 1.2.1
 
 - Empaquetado Windows automatizado por tag con GitHub Actions (`vX.Y.Z`).
