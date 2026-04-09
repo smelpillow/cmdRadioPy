@@ -12,6 +12,12 @@ Reproductor de radio online, principalmente se nutre de datos de listas .M3U, pe
 
 Escucha radio internacionales o temáticas, todo ello desde tu terminal, consumiendo menos de 15 Megas de memoria RAM.
 
+## Novedades 1.2.2
+
+- Publicado release `v1.2.2` con artefactos `cmdradiopy-win64.zip` y `cmdradiopy-win64.sha256`.
+- Corrección de formato de cadenas en reproducción para evitar errores de sintaxis en CI/build.
+- Alineación de metadatos de versión en app y packaging (Scoop/Chocolatey).
+
 ## Novedades 1.2.1
 
 - Empaquetado Windows automatizado por tag con GitHub Actions (`vX.Y.Z`).
@@ -259,4 +265,4 @@ Los siguientes archivos se guardan automáticamente en el directorio de datos de
 
 - Si `mpv` no está en PATH, el programa mostrará instrucciones de instalación.
 - El modo "aleatorio global" selecciona una playlist aleatoria y luego un canal aleatorio dentro (no uniformemente por número de canales).
-- El empaquetado Windows en curso usa un zip con `cmdradiopy.exe` y playlists iniciales incluidas en el artefacto de release.
+- El empaquetado Windows publica un zip con `cmdradiopy.exe` y playlists iniciales incluidas en el artefacto de release por tag (`vX.Y.Z`).
