@@ -27,7 +27,6 @@ jobs:
             dh-python \
             python3-all \
             python3-setuptools \
-            python3-charstyle \
             python3-colorama \
             lintian
 
