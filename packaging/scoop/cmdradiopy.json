@@ -1,9 +1,9 @@
 {
-  "version": "1.2.7",
+  "version": "1.2.8",
   "description": "cmdRadioPy - terminal online radio player",
   "homepage": "https://github.com/smelpillow/cmdRadiopy",
   "license": "GPL-3.0-only",
-  "url": "https://github.com/smelpillow/cmdRadioPy/releases/download/v1.2.7/cmdradiopy-win64.zip",
+  "url": "https://github.com/smelpillow/cmdRadioPy/releases/download/v1.2.8/cmdradiopy-win64.zip",
   "hash": "7d6643dddacbb629ac4d04e9b0908763d0142cd04700bf0ec576b29b845da7c5",
   "extract_dir": "cmdradiopy",
   "bin": [
