@@ -12,24 +12,24 @@ Reproductor de radio online, principalmente se nutre de datos de listas .M3U, pe
 
 Escucha radio internacionales o temáticas, todo ello desde tu terminal, consumiendo menos de 15 Megas de memoria RAM.
 
-## Novedades 1.2.7
+## Novedades 1.2.9
 
-- Publicado release `v1.2.7` con artefactos Windows y Linux y sus archivos `sha256`.
-- Corregido el versionado Debian para generar `cmdradiopy_1.2.7-1_all.deb`.
-- Ajustes del IPC de `mpv` en Linux para estabilizar la OSD propia en Ubuntu.
+- Publicado release `v1.2.9` con artefactos Windows y Linux y sus archivos `sha256`.
+- Contador de emisoras visible en el listado de playlists (`nombre [N]`).
+- Caché persistente de contadores de playlists para arranque más rápido.
 
 ## Descarga (Windows)
 
 - Release más reciente: <https://github.com/smelpillow/cmdRadioPy/releases/latest>
-- Release v1.2.7: <https://github.com/smelpillow/cmdRadioPy/releases/tag/v1.2.7>
-- `cmdradiopy-win64.zip`: <https://github.com/smelpillow/cmdRadioPy/releases/download/v1.2.7/cmdradiopy-win64.zip>
-- `cmdradiopy-win64.sha256`: <https://github.com/smelpillow/cmdRadioPy/releases/download/v1.2.7/cmdradiopy-win64.sha256>
+- Release v1.2.9: <https://github.com/smelpillow/cmdRadioPy/releases/tag/v1.2.9>
+- `cmdradiopy-win64.zip`: <https://github.com/smelpillow/cmdRadioPy/releases/download/v1.2.9/cmdradiopy-win64.zip>
+- `cmdradiopy-win64.sha256`: <https://github.com/smelpillow/cmdRadioPy/releases/download/v1.2.9/cmdradiopy-win64.sha256>
 
 ## Descarga (Linux)
 
-- Release v1.2.7 (assets Linux): <https://github.com/smelpillow/cmdRadioPy/releases/tag/v1.2.7>
-- `cmdradiopy_1.2.7-1_all.deb`: <https://github.com/smelpillow/cmdRadioPy/releases/download/v1.2.7/cmdradiopy_1.2.7-1_all.deb>
-- `cmdradiopy_1.2.7-1_all.deb.sha256`: <https://github.com/smelpillow/cmdRadioPy/releases/download/v1.2.7/cmdradiopy_1.2.7-1_all.deb.sha256>
+- Release v1.2.9 (assets Linux): <https://github.com/smelpillow/cmdRadioPy/releases/tag/v1.2.9>
+- `cmdradiopy_1.2.9-1_all.deb`: <https://github.com/smelpillow/cmdRadioPy/releases/download/v1.2.9/cmdradiopy_1.2.9-1_all.deb>
+- `cmdradiopy_1.2.9-1_all.deb.sha256`: <https://github.com/smelpillow/cmdRadioPy/releases/download/v1.2.9/cmdradiopy_1.2.9-1_all.deb.sha256>
 
 ## Instalacion de paquetes
 
@@ -48,11 +48,11 @@ choco install mpv
 
 ### Linux (`.deb`)
 
-1. Descarga `cmdradiopy_1.2.7-1_all.deb` desde la release.
+1. Descarga `cmdradiopy_1.2.9-1_all.deb` desde la release.
 2. Instala el paquete con `apt`:
 
 ```bash
-sudo apt install ./cmdradiopy_1.2.7-1_all.deb
+sudo apt install ./cmdradiopy_1.2.9-1_all.deb
 ```
 
 3. Ejecuta:
@@ -65,7 +65,7 @@ cmdradiopy
 Si `apt` no resuelve dependencias en tu distro derivada:
 
 ```bash
-sudo dpkg -i ./cmdradiopy_1.2.7-1_all.deb
+sudo dpkg -i ./cmdradiopy_1.2.9-1_all.deb
 sudo apt-get -f install -y
 ```
 
