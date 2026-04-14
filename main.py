@@ -103,6 +103,7 @@ HISTORY_FILE = os.path.join(USER_DATA_DIR, 'history.json')
 CONFIG_FILE = os.path.join(USER_DATA_DIR, 'config.json')
 SEARCH_HISTORY_FILE = os.path.join(USER_DATA_DIR, 'search_history.json')
 UNPLAYABLE_STATIONS_FILE = os.path.join(USER_DATA_DIR, 'unplayable_stations.json')
+PLAYLIST_CACHE_FILE = os.path.join(USER_DATA_DIR, '.playlist_cache.json')
 UNPLAYABLE_THRESHOLD = 3
 
 
@@ -348,6 +349,51 @@ def save_config() -> None:
 			json.dump(CONFIG, f, ensure_ascii=False, indent=2)
 	except Exception:
 		pass
+
+
+def load_playlist_cache() -> Dict[str, int]:
+	"""Carga el caché de contadores de playlists."""
+	cache: Dict[str, int] = {}
+	if os.path.isfile(PLAYLIST_CACHE_FILE):
+		try:
+			with open(PLAYLIST_CACHE_FILE, 'r', encoding='utf-8') as f:
+				data = json.load(f)
+				if isinstance(data, dict):
+					cache.update(data)
+		except Exception:
+			pass
+	return cache
+
+
+def save_playlist_cache(cache: Dict[str, int]) -> None:
+	"""Guarda el caché de contadores de playlists."""
+	try:
+		with open(PLAYLIST_CACHE_FILE, 'w', encoding='utf-8') as f:
+			json.dump(cache, f, ensure_ascii=False, indent=2)
+	except Exception:
+		pass
+
+
+def rebuild_playlist_cache() -> Dict[str, int]:
+	"""Reconstruye el caché parseando todos los archivos .m3u/.m3u8."""
+	cache: Dict[str, int] = {}
+	ensure_playlists_dir()
+	try:
+		all_files = os.listdir(PLAYLISTS_DIR)
+		for filename in all_files:
+			if filename.lower().endswith(('.m3u', '.m3u8')):
+				path = os.path.join(PLAYLISTS_DIR, filename)
+				if os.path.isfile(path):
+					try:
+						channels = parse_m3u_file(path)
+						cache[filename] = len(channels)
+					except Exception:
+						# Si hay error parseando, asignar 0
+						cache[filename] = 0
+		save_playlist_cache(cache)
+	except Exception:
+		pass
+	return cache
 
 
 def apply_runtime_preferences_from_config() -> None:
@@ -1290,6 +1336,74 @@ def list_playlists() -> List[str]:
 	]
 	pls.sort(reverse=not SORT_PLAYLISTS_ASC)
 	return pls
+
+
+def extract_playlist_name_from_label(label: str) -> str:
+	"""Extrae el nombre real del archivo desde un label con formato 'nombre [N]'.
+	
+	Ejemplo: 'pop [45]' -> 'pop.m3u' o 'pop.m3u8'
+	"""
+	# Buscar el último corchete cuadrado
+	if ' [' in label and label.endswith(']'):
+		base_name = label.rsplit(' [', 1)[0]
+	else:
+		base_name = label
+	
+	# Intentar encontrar el archivo correspondiente
+	ensure_playlists_dir()
+	all_files = os.listdir(PLAYLISTS_DIR)
+	for filename in all_files:
+		if filename.lower().endswith(('.m3u', '.m3u8')):
+			# Comparar sin extensión
+			filename_no_ext = os.path.splitext(filename)[0]
+			if filename_no_ext.lower() == base_name.lower():
+				return filename
+	
+	# Si no encuentra coincidencia exacta, retornar label como está
+	return label
+
+
+def list_playlists_with_counts() -> List[str]:
+	"""Retorna lista de playlists con formato 'nombre [contador]'.
+	
+	Ejemplo: ['pop [45]', 'rock [78]', 'jazz [23]']
+	"""
+	ensure_playlists_dir()
+	all_files = os.listdir(PLAYLISTS_DIR)
+	pls = [
+		f for f in all_files
+		if f.lower().endswith(('.m3u', '.m3u8')) and os.path.isfile(os.path.join(PLAYLISTS_DIR, f))
+	]
+	
+	# Cargar caché existente
+	cache = load_playlist_cache()
+	
+	# Archivos que no están en caché
+	missing_files = [f for f in pls if f not in cache]
+	
+	# Si hay archivos faltantes, actualizarlos
+	if missing_files:
+		for filename in missing_files:
+			path = os.path.join(PLAYLISTS_DIR, filename)
+			try:
+				channels = parse_m3u_file(path)
+				cache[filename] = len(channels)
+			except Exception:
+				cache[filename] = 0
+		
+		# Guardar caché actualizado
+		save_playlist_cache(cache)
+	
+	# Construir labels con contadores
+	labels = [
+		f"{os.path.splitext(f)[0]} [{cache.get(f, 0)}]"
+		for f in pls
+	]
+	
+	# Aplicar ordenamiento
+	labels.sort(reverse=not SORT_PLAYLISTS_ASC)
+	
+	return labels
 
 
 def strip_ansi_len(s: str) -> int:
@@ -4131,7 +4245,7 @@ def main() -> int:
 	header(f"Menú principal - {APP_NAME} v{APP_VERSION}")
 	print_ascii_logo()
 	print(c(f"Versión: {APP_VERSION}", Colors.DIM))
-	pls = list_playlists()
+	pls = list_playlists_with_counts()
 	if not pls:
 		print(f"No se encontraron listas en '{PLAYLISTS_DIR}'. Añade archivos .m3u/.m3u8.")
 		return 1
@@ -4172,7 +4286,7 @@ def main() -> int:
 			return 0
 		# REPRODUCCIÓN
 		elif opt == '1':
-			pls = list_playlists()
+			pls = list_playlists_with_counts()
 			# Filtro para playlists
 			pl_filter = ''
 			while True:
@@ -4183,7 +4297,7 @@ def main() -> int:
 					SORT_PLAYLISTS_ASC = not SORT_PLAYLISTS_ASC
 					CONFIG['sort_playlists'] = 'asc' if SORT_PLAYLISTS_ASC else 'desc'
 					save_config()
-					pls = list_playlists()
+					pls = list_playlists_with_counts()
 					continue
 				if idx == -3:
 					pl_filter = input(c("Texto a filtrar playlists: ", Colors.CYAN)).strip().lower()
@@ -4191,7 +4305,9 @@ def main() -> int:
 				break
 			if idx == 0:
 				continue
-			path = os.path.join(PLAYLISTS_DIR, filtered_pls[idx - 1])
+			playlist_label = filtered_pls[idx - 1]
+			playlist_filename = extract_playlist_name_from_label(playlist_label)
+			path = os.path.join(PLAYLISTS_DIR, playlist_filename)
 			icon_pl = icon('PLAYLIST')
 			print(c(f"{icon_pl}Cargando playlist...", Colors.CYAN), end='', flush=True)
 			try:
@@ -4208,7 +4324,7 @@ def main() -> int:
 				continue
 			while True:
 				print()
-				pl_name = filtered_pls[idx - 1]
+				pl_name = extract_playlist_name_from_label(filtered_pls[idx - 1])
 				pl_count = len(channels)
 				header(f"Playlist: {pl_name} ({pl_count} emisoras)")
 				print(f"  {c('1.', Colors.YELLOW)} Elegir canal")
