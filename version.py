@@ -1,5 +1,5 @@
 APP_NAME = "cmdRadioPy"
-APP_VERSION = "1.2.7"
+APP_VERSION = "1.2.9"
 DEFAULT_USER_AGENT = f"{APP_NAME}/{APP_VERSION}"
 
 # Versiones de formato de datos/backup (no confundir con APP_VERSION)

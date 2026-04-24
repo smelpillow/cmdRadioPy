@@ -82,6 +82,9 @@ htmlcov/
 mpv/
 mpv.exe
 
+# Documentación local de release (instrucciones internas)
+RELEASE.md
+
 # Archivos de exportación/importación (si se guardan en el proyecto)
 *.export.json
 *.backup.json

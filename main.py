@@ -5,6 +5,7 @@ import random
 import shutil
 import json
 import time
+import unicodedata
 from datetime import datetime
 from typing import Any, List, Dict, Optional, Callable
 
@@ -218,6 +219,41 @@ def term_width(default: int = 80) -> int:
 		return max(40, shutil.get_terminal_size((default, 20)).columns)
 	except Exception:
 		return default
+
+
+def _visible_width(s: str) -> int:
+	"""Devuelve el número de columnas de terminal que ocupa *s* (sin contar códigos ANSI)."""
+	import re
+	plain = re.sub(r'\x1b\[[0-9;]*[mKHJABCDfsuhrn]', '', s)
+	width = 0
+	for ch in plain:
+		eaw = unicodedata.east_asian_width(ch)
+		width += 2 if eaw in ('W', 'F') else 1
+	return width
+
+
+def _trunc_to_cols(s: str, max_cols: int) -> str:
+	"""Trunca *s* para que ocupe como máximo *max_cols* columnas de terminal.
+
+	Tiene en cuenta emojis y caracteres Unicode 'Wide' que ocupan 2 columnas.
+	Los códigos de escape ANSI no consumen columnas.
+	"""
+	import re
+	# Patrón que captura tokens: código ANSI o carácter individual
+	_TOKEN = re.compile(r'(\x1b\[[0-9;]*[mKHJABCDfsuhrn])|(.)', re.DOTALL)
+	result: list[str] = []
+	visible = 0
+	for ansi, ch in _TOKEN.findall(s):
+		if ansi:
+			result.append(ansi)
+		else:
+			eaw = unicodedata.east_asian_width(ch)
+			char_w = 2 if eaw in ('W', 'F') else 1
+			if visible + char_w > max_cols:
+				break
+			result.append(ch)
+			visible += char_w
+	return ''.join(result)
 
 
 def line(char: str = '─') -> str:
@@ -2604,11 +2640,11 @@ def draw_custom_osd(state: dict, first_time: bool, key: Optional[str] = None) ->
 	is_fav = _is_favorite(channel_url) if channel_url else False
 	fav_icon = "⭐" if is_fav else "☆"
 
-	lines_out.append(c(f"  {pretty_icons['mode']} Modo: {mode}"[:w], Colors.GREEN))
-	lines_out.append(c(f"  {pretty_icons['station']} {fav_icon} {station}"[:w], Colors.WHITE))
+	lines_out.append(c(_trunc_to_cols(f"  {pretty_icons['mode']} Modo: {mode}", w), Colors.GREEN))
+	lines_out.append(c(_trunc_to_cols(f"  {pretty_icons['station']} {fav_icon} {station}", w), Colors.WHITE))
 	if source and source.lower().endswith((".m3u", ".m3u8")):
-		lines_out.append(c(f"  {pretty_icons['source']} M3U: {source}"[:w], Colors.DIM))
-	lines_out.append(c(f"  {pretty_icons['now']} Ahora suena: {title}"[:w], Colors.MAGENTA))
+		lines_out.append(c(_trunc_to_cols(f"  {pretty_icons['source']} M3U: {source}", w), Colors.DIM))
+	lines_out.append(c(_trunc_to_cols(f"  {pretty_icons['now']} Ahora suena: {title}", w), Colors.MAGENTA))
 	lines_out.append("")
 
 	time_pos = float(state.get("time_pos") or 0.0)
@@ -2635,14 +2671,14 @@ def draw_custom_osd(state: dict, first_time: bool, key: Optional[str] = None) ->
 	else:
 		buffer_line = f"  🔴 Buffer: {_format_time_hms(time_pos)}  En directo"
 		buffer_color = Colors.DIM
-	lines_out.append(c(buffer_line[:w], buffer_color))
+	lines_out.append(c(_trunc_to_cols(buffer_line, w), buffer_color))
 
 	usage_line = (
 		f"  {pretty_icons['usage']} Consumo app: "
 		f"CPU {usage.get('cpu_percent', 0.0):.1f}%  "
 		f"RAM {usage.get('memory_text', '0 KB')}"
 	)
-	lines_out.append(c(usage_line[:w], Colors.CYAN))
+	lines_out.append(c(_trunc_to_cols(usage_line, w), Colors.CYAN))
 
 	audio_codec = state.get("audio_codec")
 	audio_bitrate = state.get("audio_bitrate_kbps")
@@ -2655,13 +2691,13 @@ def draw_custom_osd(state: dict, first_time: bool, key: Optional[str] = None) ->
 	if isinstance(samplerate_hz, (int, float)) and samplerate_hz > 0:
 		tech_parts.append(f"{(float(samplerate_hz) / 1000.0):.1f} kHz")
 	if tech_parts:
-		lines_out.append(c(f"  {pretty_icons['audio']} Audio: {' | '.join(tech_parts)}"[:w], Colors.DIM))
+		lines_out.append(c(_trunc_to_cols(f"  {pretty_icons['audio']} Audio: {' | '.join(tech_parts)}", w), Colors.DIM))
 	lines_out.append("")
 
 	mute_icon = "🔇" if mute else "🔊"
 	play_icon = getattr(Icon, "PAUSE", "⏸") if pause else getattr(Icon, "PLAY", "▶")
 	state_text = f"  {pretty_icons['status']} Estado: {'PAUSADO' if pause else 'REPRODUCIENDO'}  {mute_icon} Vol:{vol}%"
-	lines_out.append(c(state_text[:w], Colors.YELLOW if pause else Colors.GREEN))
+	lines_out.append(c(_trunc_to_cols(state_text, w), Colors.YELLOW if pause else Colors.GREEN))
 	controls_line_1 = (
 		f"  {pretty_icons['controls']} [P] {play_icon} Pausa  [+] Vol+  [-] Vol-  [M] {mute_icon} Mute"
 	)
@@ -2669,13 +2705,13 @@ def draw_custom_osd(state: dict, first_time: bool, key: Optional[str] = None) ->
 		f"  {pretty_icons['controls']} [F] {pretty_icons['favorite']} Fav  [B] 🚫 Ban  "
 		f"[N] {pretty_icons['next']} Siguiente  [Q] {pretty_icons['exit']} Salir"
 	)
-	lines_out.append(c(controls_line_1[:w], Colors.CYAN))
-	lines_out.append(c(controls_line_2[:w], Colors.CYAN))
+	lines_out.append(c(_trunc_to_cols(controls_line_1, w), Colors.CYAN))
+	lines_out.append(c(_trunc_to_cols(controls_line_2, w), Colors.CYAN))
 
 	status_message = _osd_get_status_message()
 	if status_message:
 		lines_out.append("")
-		lines_out.append(c(f"  {status_message}"[:w], Colors.CYAN))
+		lines_out.append(c(_trunc_to_cols(f"  {status_message}", w), Colors.CYAN))
 
 	if not first_time and _osd_last_rendered_lines > 0:
 		sys.stdout.write("\033[%dA" % _osd_last_rendered_lines)
